@@ -1,7 +1,7 @@
 # Handoff — AK980 Manager
 
 Last updated: 2026-11-22 (third long session: key functions, macros, profiles, screen editor, lighting schemes, 2.4G dongle, Fn layer solved, dongle-only test).
-Repository: https://github.com/j0p3s/AK980-Manager · License: GPL-3.0-or-later · latest release **v1.0.6**.
+Repository: https://github.com/j0p3s/AK980-Manager · License: GPL-3.0-or-later · latest release **v1.0.7**.
 
 ## What this is
 English control software for the user's **AJAZZ AK980 V2 PRO** keyboard (Sonix `0C45:8009` wired, `0C45:FEFE` 2.4G dongle), because the official app is Chinese-only.
@@ -33,7 +33,7 @@ skipped in a git checkout). By hand: `pip install -r requirements.txt` then `pyt
 **Close the official app first** (the GUI shows a banner with a "Close it" button).
 
 ## Where the last session stopped (read this first)
-* Everything is pushed; v1.0.6 is released (2026-11-22).
+* Everything is pushed; v1.0.7 is released (2026-11-22).
 * **Fn layer: SOLVED (cable)**. Our `04 27` table format is identical to the official app's (checked with Frida, `research/logs/fnassign.log`). The earlier failures were the test keys:
   **Fn+Q and Fn+1 are reserved by the firmware** (also fail when the official app writes them); Fn+A and Fn+J work. **Toggle** failed only because of timing: the keyboard silently ignores a
   system packet (`04 17`) sent right after a key-table write. `set_system` now calls `wait_ready()` + sleeps 0.6 s first (verified: sleep byte 1 and 2 both work then; fn_toggle byte 5 = 1 is Toggle,
