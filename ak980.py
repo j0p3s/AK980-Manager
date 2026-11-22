@@ -12,7 +12,7 @@ reports on MI_02 for screen images); every command is a transaction  `04 18` ...
 See docs/PROTOCOL.md for the full description.
 IMPORTANT: the official AJAZZ app polls the keyboard ~12x/s and breaks writes; close it before using this.
 """
-import ctypes, threading, time
+import ctypes, queue, threading, time
 from ctypes import wintypes as w
 
 VID, PID, IFACE = 0x0C45, 0x8009, 'mi_03'
@@ -44,7 +44,7 @@ class SP_DEVICE_INTERFACE_DATA(ctypes.Structure):
     _fields_ = [('cbSize', w.DWORD), ('Guid', GUID), ('Flags', w.DWORD), ('Reserved', ctypes.c_void_p)]
 
 
-def find_path(iface=IFACE):
+def find_path(iface=IFACE, pid=None):
     """Return the device path of the keyboard's vendor interface, or None."""
     g = GUID()
     hid.HidD_GetHidGuid(ctypes.byref(g))
@@ -65,7 +65,7 @@ def find_path(iface=IFACE):
             if setupapi.SetupDiGetDeviceInterfaceDetailW(ctypes.c_void_p(info), ctypes.byref(d), buf, need, None, None):
                 path = ctypes.wstring_at(ctypes.addressof(buf) + 4)
                 p = path.lower()
-                if 'vid_%04x&pid_%04x' % (VID, PID) in p and iface in p:
+                if 'vid_%04x&pid_%04x' % (VID, pid or PID) in p and iface in p:
                     found = path
                     break
     finally:
@@ -362,6 +362,118 @@ class Keyboard:
         body = bytes([eid, r, g, b, 0, 0, 0, 0, 1 if colorful else 0,
                       max(0, min(5, brightness)), max(0, min(5, speed)), direction & 1, 0, 0, 0xAA, 0x55])
         self.transaction(bytes([0x04, 0x18]), bytes([0x04, 0x13, 0, 0, 0, 0, 0, 0, 1]), body, bytes([0x04, 0xF0]))
+
+
+DONGLE_PID = 0xFEFE
+
+
+class DongleKeyboard:
+    """The keyboard in 2.4G mode through its USB dongle (VID 0C45, PID FEFE). Captured from the official app (2026-11-22):
+    commands are 33-byte output reports (report id 0 + 32 bytes) on the dongle's MI_03 (usage page FF60), the last byte is the sum
+    of the first 31. Known so far: set key `03 04 <key_index> <type> <b1> <b2>` (Top layer), lighting `05 10 00 <wired 16-byte block>`,
+    keep-alive `20 01`. Fn layer, macros, per-key colours, screen and real-time lighting are NOT known over the dongle yet.
+    """
+    wireless = True
+    MAX_FRAMES = Keyboard.MAX_FRAMES
+
+    def __init__(self):
+        self.path = find_path('mi_03', DONGLE_PID)
+        if not self.path:
+            raise OSError('AK980 2.4G dongle not found')
+        self.lock = threading.Lock()
+        self._acks = queue.Queue()
+        self._hw = self._open_dongle(0x40000000)
+        hr = self._open_dongle(0x80000000)
+        threading.Thread(target=self._read_loop, args=(hr,), daemon=True).start()
+
+    def _open_dongle(self, access):
+        h = k32.CreateFileW(self.path, access, 3, None, 3, 0, None)
+        if h in (None, w.HANDLE(-1).value):
+            raise OSError('cannot open the dongle (error %d)' % ctypes.get_last_error())
+        return h
+
+    def _read_loop(self, h):
+        """The dongle answers every command (e.g. `03 04 <key> 00`); collect the answers so _send can wait for them."""
+        while True:
+            buf = ctypes.create_string_buffer(33)
+            got = w.DWORD()
+            if not k32.ReadFile(h, buf, 33, ctypes.byref(got), None):
+                break
+            self._acks.put(buf.raw[1:got.value])
+
+    def _send(self, body, retries=5):
+        """Send one 32-byte command and wait for the dongle's answer. The wireless link sleeps when idle and the first packet after a
+        pause can be lost, so an unanswered command is sent again (up to `retries` times)."""
+        b = bytearray(32)
+        b[:len(body)] = body
+        b[31] = sum(b[:31]) & 0xFF
+        for _ in range(retries):
+            while not self._acks.empty():
+                self._acks.get_nowait()
+            written = w.DWORD()
+            if not k32.WriteFile(self._hw, bytes([0]) + bytes(b), 33, ctypes.byref(written), None) or written.value != 33:
+                raise OSError('dongle write failed (error %d)' % ctypes.get_last_error())
+            end = time.time() + 0.8
+            while time.time() < end:
+                try:
+                    r = self._acks.get(timeout=0.1)
+                except queue.Empty:
+                    continue
+                if r[:1] == bytes(b[:1]):
+                    return r
+        raise OSError('The keyboard did not answer through the 2.4G dongle. Press a key to wake it, or check that it is in 2.4G mode.')
+
+    def wait_ready(self, timeout=10.0):
+        time.sleep(0.05)
+
+    def set_lighting(self, effect, rgb=(255, 0, 0), colorful=False, brightness=3, speed=3, direction=0):
+        eid = EFFECT_ID[effect] if isinstance(effect, str) else int(effect)
+        r, g, b = rgb
+        payload = bytes([eid, r, g, b, 0, 0, 0, 0, 1 if colorful else 0,
+                         max(0, min(5, brightness)), max(0, min(5, speed)), direction & 1, 0, 0, 0xAA, 0x55])
+        with self.lock:
+            self._send(bytes([0x05, 0x10, 0x00]) + payload)
+
+    @staticmethod
+    def _default_entry(idx):
+        import keys
+        usage = next(k[2] for k in keys.KEYS if k[0] == idx)
+        return (0x02, 1 << (usage - 0xE0), 0) if 0xE0 <= usage <= 0xE7 else (0x02, 0, usage)
+
+    def set_keymap(self, entries, layer='top'):
+        """entries: {key_index: (type, b1, b2)}. Over the dongle each key is its own packet, so keys that an earlier call changed
+        and that are not listed now get their default function written back (remembered in dongle_touched.json)."""
+        if layer != 'top':
+            raise OSError('The Fn layer cannot be set over 2.4G yet - use the USB cable for it.')
+        import json
+        import os
+        store = os.path.join(os.environ.get('APPDATA', '.'), 'AK980Manager', 'dongle_touched.json')
+        try:
+            touched = set(json.load(open(store, encoding='utf-8')))
+        except (OSError, ValueError):
+            touched = set()
+        todo = {int(i): tuple(e) for i, e in entries.items()}
+        for i in touched - set(todo):
+            todo[i] = self._default_entry(i)
+        with self.lock:
+            for i, e in sorted(todo.items()):
+                self._send(bytes([0x03, 0x04, i]) + bytes(e[:3]))
+        os.makedirs(os.path.dirname(store), exist_ok=True)
+        with open(store, 'w', encoding='utf-8') as f:
+            json.dump(sorted(entries), f)
+
+    def _unsupported(self, *a, **k):
+        raise OSError('This is not available over 2.4G yet - use the USB cable.')
+
+    set_macros = set_user_lighting = set_system = set_time = upload_screen = stream_realtime = realtime_frame = _unsupported
+
+
+def connect():
+    """The wired keyboard if it is plugged in, else the 2.4G dongle. Raises OSError if neither is found."""
+    try:
+        return Keyboard()
+    except OSError:
+        return DongleKeyboard()
 
 
 if __name__ == '__main__':

@@ -10,7 +10,7 @@ Everything below was checked against captures; items marked **(unverified)** wer
 | | |
 |---|---|
 | USB (wired) | VID `0C45` (Sonix) PID `8009`, composite device, interfaces MI_00..MI_03 |
-| 2.4G dongle | VID `0C45` PID `FEFE` (HID interface MI_03) — **not tested** |
+| 2.4G dongle | VID `0C45` PID `FEFE`: MI_00 keyboard, MI_01 mouse, MI_02 consumer/system + vendor `Col05` (key events), **MI_03 vendor FF60 = commands (33-byte reports)**, MI_04 vendor FF59 (65-byte, unknown). See the 2.4G section. |
 | MI_03 | vendor usage page `0xFF13`; 65-byte input/output/feature reports → **command channel** |
 | MI_02 | vendor usage page `0xFF68`; 4097-byte output report (id 0 + 4096 data) → **bulk data (screen images)** |
 | MI_00 / MI_01 | boot keyboard / mouse + consumer + system collections (normal typing) |
@@ -138,3 +138,15 @@ nothing of the official app's key, macro, profile, screen or lighting-scheme fea
 
 Mouse and modifier events and repeat count in macros, Real-time Lighting and Music Rhythm (see above), 2.4G / Bluetooth modes,
 the firmware update path, lighting effect "LED Off".
+
+## 2.4G dongle (captured 2026-11-22, lighting + Top-layer keys verified on hardware)
+
+* Commands are output reports of 33 bytes (report id 0 + 32 bytes) written with `WriteFile` to the dongle's `MI_03` (usage page `0xFF60`).
+  Byte 31 = sum of bytes 0-30 (mod 256). The dongle answers on the same interface (input report, 33 bytes): for a key command `03 04 <key> 00`.
+  The link sleeps when idle and **the first packet after a pause can be lost**: wait for the answer and resend (we retry up to 5 times).
+* Set one key (Top layer): `03 04 <key_index> <type> <b1> <b2>`, same key indices and entry types as the wired tables. There is no
+  whole-table write; restoring a key = writing its default entry (`02 00 <usage>`, modifiers `02 <mask> 00`).
+* Lighting: `05 10 00` + the same 16-byte block as the wired lighting packet (`effect R G B 0 0 0 0 colorful brightness speed direction 0 0 AA 55`).
+* Keep-alive from the official app: `20 01 ...` every 15 s.
+* Not captured yet over the dongle: Fn layer, macros, per-key colours, screen upload, real-time lighting, system settings.
+* Bluetooth: the official app does not support keyboard settings there, so nothing to implement.

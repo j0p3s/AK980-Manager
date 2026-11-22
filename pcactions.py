@@ -51,7 +51,7 @@ def _event_path():
             ctypes.cast(buf, ctypes.POINTER(w.DWORD))[0] = 8 if ctypes.sizeof(ctypes.c_void_p) == 8 else 6
             if setupapi.SetupDiGetDeviceInterfaceDetailW(ctypes.c_void_p(info), ctypes.byref(d), buf, need, None, None):
                 p = ctypes.wstring_at(ctypes.addressof(buf) + 4)
-                if 'vid_%04x&pid_%04x' % (ak980.VID, ak980.PID) in p.lower() and 'mi_01&col05' in p.lower():
+                if any('vid_%04x&pid_%04x' % (ak980.VID, pid) in p.lower() for pid in (ak980.PID, ak980.DONGLE_PID)) and '&col05' in p.lower():   # wired MI_01, dongle MI_02
                     return p
     finally:
         setupapi.SetupDiDestroyDeviceInfoList(ctypes.c_void_p(info))

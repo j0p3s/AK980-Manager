@@ -251,9 +251,9 @@ class App(tk.Tk):
     def _tick_connect(self):
         if not self.kb:
             try:
-                self.kb = ak980.Keyboard()
+                self.kb = ak980.connect()
                 self._draw_pill(True)
-                self.status_msg('Keyboard connected', 'ok')
+                self.status_msg('Keyboard connected' + (' over 2.4G (lighting and keys only)' if getattr(self.kb, 'wireless', False) else ''), 'ok')
             except OSError:
                 self._draw_pill(False)
                 self.status_msg('Keyboard not found - plug it in with the USB cable (wired mode).', 'err')

@@ -96,7 +96,7 @@ unpacked vendor installer. It is in `.gitignore` on purpose; do not publish it.
 2b. From the app's English strings (`research/ak980_extract/en_strings.txt`): key response levels 1-5, Fn Momentary/Toggle,
    3 exclusive configs, lighting-scheme import/export, TFT frame editor + GIF export.
 3. Verify the remaining effect ids, "LED Off", direction byte, key response level 1, and the clock on the screen by eye.
-4. 2.4G dongle (`0C45:FEFE`, interface MI_03) and Bluetooth modes.
+4. 2.4G dongle: DONE for lighting + Top-layer keys (`ak980.DongleKeyboard`, `connect()`, see docs/PROTOCOL.md; capture `research/logs/dongle1.log`). Open: Fn layer, macros, per-key colours, screen, real-time lighting, system settings over the dongle (need captures with the dongle). Bluetooth: not supported by the official app either.
 5. Lighting-scheme import/export DONE (Per-key page; official file = `<userlight><lightinfo name/><keyinfo><item key_code=HID usage key_rgb=R+G*256+B*65536/>`, sample `research/Custom Light 1-15129328.xml`, verified on hardware); screen frame editor DONE. Profiles DONE (v1.0.5 work, `profiles.py`, app-side .json files, not the keyboard's own slots; load and apply verified on the real keyboard by the user). Polish: a proper installer or PyInstaller build, tests for the table builders.
 6. **New GUI (2026-11-22) was checked by code only**: every page builds, no clipped widgets (geometry walk), reactive modes start/stop on the real keyboard,
    key assign/restore and per-key paint work. Nobody has looked at it yet (screenshots could not be viewed in that session) - ask the user for visual
