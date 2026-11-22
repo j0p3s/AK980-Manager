@@ -5,6 +5,7 @@ import colorsys
 import html
 import json
 import os
+import re
 import tkinter as tk
 from tkinter import colorchooser, filedialog, messagebox, ttk
 
@@ -69,27 +70,61 @@ def save_json(path, obj):
 SHIFT_USAGE, ALTGR_USAGE = 0xE1, 0xE6          # Left Shift, Right Alt (= AltGr on layouts that have it)
 
 
+MOUSE_TOKENS = {'click': 1, 'leftclick': 1, 'rightclick': 2, 'middleclick': 4}      # name -> button bit
+_TOKEN = re.compile(r'\{\{|\}\}|\{(click|leftclick|rightclick|middleclick|wait)(?:\s+(\d+))?\}', re.I)
+
+
+def _parse_macro(text):
+    """Split macro text into ('text', str) / ('mouse', bit) / ('wait', ms). {{ and }} are literal braces."""
+    out, pos = [], 0
+    for m in _TOKEN.finditer(text):
+        if m.start() > pos:
+            out.append(('text', text[pos:m.start()]))
+        pos = m.end()
+        if m.group(0) in ('{{', '}}'):
+            out.append(('text', m.group(0)[0]))
+        elif m.group(1).lower() == 'wait':
+            out.append(('wait', int(m.group(2) or 100)))
+        else:
+            out.append(('mouse', MOUSE_TOKENS[m.group(1).lower()]))
+    if pos < len(text):
+        out.append(('text', text[pos:]))
+    return out
+
+
 def macro_events(text, delay):
-    """Key events (usage, is_down, delay_ms) that type text on the active Windows layout: capitals and symbols use Shift / AltGr,
-    accented letters use the dead accent key, so the result matches what the user's layout would type."""
-    ev = []
-    for ch in text:
-        steps = layout.type_steps(ch)
-        if not steps:
-            continue
-        for u, shift, altgr in steps:
-            mods = ([SHIFT_USAGE] if shift else []) + ([ALTGR_USAGE] if altgr else [])
-            for m in mods:
-                ev.append((m, True, delay))
-            ev += [(u, True, delay), (u, False, delay)]
-            for m in reversed(mods):
-                ev.append((m, False, delay))
+    """Events (usage, is_down, delay_ms, is_mouse) that type text on the active Windows layout (capitals, symbols and accents use
+    Shift / AltGr / dead keys, so the result matches what the user's layout types). Mouse clicks: {click} {rightclick}
+    {middleclick}; extra pause: {wait 500}; literal braces: {{ and }}."""
+    ev, extra = [], 0
+
+    def add(u, down, mouse=False):
+        nonlocal extra
+        ev.append((u, down, delay + extra, mouse))
+        extra = 0
+    for kind, val in _parse_macro(text):
+        if kind == 'wait':
+            extra += val
+        elif kind == 'mouse':
+            add(val, True, True)
+            add(val, False, True)
+        else:
+            for ch in val:
+                for u, shift, altgr in layout.type_steps(ch) or []:
+                    mods = ([SHIFT_USAGE] if shift else []) + ([ALTGR_USAGE] if altgr else [])
+                    for m in mods:
+                        add(m, True)
+                    add(u, True)
+                    add(u, False)
+                    for m in reversed(mods):
+                        add(m, False)
     return ev
 
 
 def macro_unsupported(text):
     """Characters of text that cannot be typed with the keys of the active layout."""
-    return sorted({ch for ch in text if not layout.type_steps(ch)})
+    typed = ''.join(v for k, v in _parse_macro(text) if k == 'text')
+    return sorted({ch for ch in typed if not layout.type_steps(ch)})
 
 
 def hex_rgb(h):
@@ -824,6 +859,8 @@ class MacrosPage(Page):
         self.delay = tk.IntVar(value=40)
         Slider(b, 'Delay between keys', self.delay, 10, 500, 10, width=290, unit=' ms').pack(fill='x', pady=(0, 14))
         Btn(b, 'Save macro', self.add, 'primary', height=36).pack(anchor='w')
+        label(b, 'Mouse and pauses: {click} {rightclick} {middleclick}\n{wait 500} adds a 500 ms pause; {{ and }} are literal braces.', 9,
+              False, C['muted'], C['card'], justify='left').pack(anchor='w', pady=(14, 0))
         label(b, 'After saving, assign it to a key on the Keys page (Make it: Macro)\nand press Apply there.', 9, False, C['muted'],
               C['card'], justify='left').pack(anchor='w', pady=(14, 0))
         self._refresh()

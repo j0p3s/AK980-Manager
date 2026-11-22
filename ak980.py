@@ -154,21 +154,25 @@ class Keyboard:
     # Table: 4-byte directory entries [offset_lo, offset_hi, 0, 0] at 4*n (100 slots, data starts at 400),
     # each macro = 8-byte header [2*events, 0*7] + one 8-byte record per event
     # [0, 0, usage, flag (0xB0 down / 0x30 up), delay_lo, delay_hi, 0, 0x50]; last two bytes aa 55.
-    # A key runs macro n through keymap entry (0x06, n, 0). Repeat count is not stored here.
+    # A key runs macro n through keymap entry (0x06, n, 0). Repeat count is not stored here (checked: setting 3 in the app changes no byte).
     @staticmethod
-    def macro_table(macros):
-        """macros: list of macros; macro = list of (hid_usage, is_down, delay_ms)."""
+    def macro_table(macros, min_packets=10):
+        """macros: list of macros; macro = list of (hid_usage, is_down, delay_ms[, is_mouse]).
+        Mouse events (captured 2026-11-22): usage = button bit (1 left, 2 right, 4 middle), flag 0x90 down / 0x10 up."""
         tab = bytearray(400)
         data = bytearray()
         for n, ev in enumerate(macros):
             off = 400 + len(data)
             tab[4 * n:4 * n + 4] = bytes([off & 0xFF, off >> 8, 0, 0])
             data += bytes([2 * len(ev)]) + bytes(7)
-            for usage, down, delay in ev:
+            for e in ev:
+                usage, down, delay = e[:3]
+                mouse = len(e) > 3 and e[3]
                 d = max(10, min(65535, int(delay)))
-                data += bytes([0, 0, usage, 0xB0 if down else 0x30, d & 0xFF, d >> 8, 0, 0x50])
+                flag = (0x90 if down else 0x10) if mouse else (0xB0 if down else 0x30)
+                data += bytes([0, 0, usage, flag, d & 0xFF, d >> 8, 0, 0x50])
         tab += data
-        n_pk = len(tab) // 64 + 2
+        n_pk = max(len(tab) // 64 + 2, min_packets)
         tab += bytes(n_pk * 64 - len(tab))
         tab[-2:] = bytes([0xAA, 0x55])
         return bytes(tab)

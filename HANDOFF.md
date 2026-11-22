@@ -12,7 +12,7 @@ The protocol was reverse engineered from the official app; the full description 
 |---|---|
 | Lighting effects, colour, brightness, speed | works (effect ids 1, 8, 9, 11 seen from the official app; the rest inferred from list order; direction byte and "LED Off" untested) |
 | Keymap Top layer + Fn layer, media keys, modifiers, reset | works (Caps→Z, A→Volume+, B→Left Shift, Fn Q→W captured; Caps→Z and reset verified by typing) |
-| Macros (text typing) assigned to a key | works, verified on hardware with the Portuguese layout: capitals, symbols, AltGr, dead-accent letters (`layout.py`); no mouse events / repeat count |
+| Macros (text typing) assigned to a key | works, verified on hardware with the Portuguese layout: capitals, symbols, AltGr, dead-accent letters (`layout.py`); mouse clicks via text tokens `{click}` `{rightclick}` `{middleclick}` `{wait 500}` (verified); the keyboard stores no repeat count; macro tables are padded to >= 10 packets (needed for mouse events) |
 | Per-key RGB | works (verified by eye); needs "write table, wait until idle, then mode 0x80" |
 | TFT screen upload (240×135 RGB565, ≤140 frames) | works (own image and a user image shown); must be paced ~140 ms per 4 KB chunk |
 | System: sleep time, key response level | sent byte-identical to the app's packets; **effect not observable** by eye, so only matched to captures |
@@ -87,7 +87,7 @@ unpacked vendor installer. It is in `.gitignore` on purpose; do not publish it.
 
 ## Open work / ideas
 0. DONE (v1.0.5 work): mouse-button key functions (captured with Frida, see docs/PROTOCOL.md; `research/logs/mouse.log`, `analyze_mouse.py`), verified on hardware.
-1. Macros: DONE modifier events + layout-aware typing (capture `research/logs/macro2.log`, `analyze_macro2.py`). Still open: mouse events (the click was not recorded by the app; try the mouse-input buttons in its recorder) and the repeat count (not in the packets; maybe app-side).
+1. Macros: DONE modifier events + layout-aware typing (capture `research/logs/macro2.log`, `analyze_macro2.py`). Mouse events DONE (insert menu capture `macro3.log`, `analyze_macro3.py`). The repeat count is not in any packet.
 2. **Real-time Lighting** (SOLVED 2026-11-22, see docs/PROTOCOL.md): frames need the fixed slot order, a `04 02` packet and a status read (wait for `01`) after the header and after `04 02`. `tools/keypress_glow.py` (pressed keys light up and fade) works, verified on hardware. `tools/music_rhythm.py` (equalizer on the keys from the PC audio via WASAPI loopback, `soundcard` + numpy; `--mode pulse` = whole-keyboard bass flash, not yet eyeballed) works, verified on hardware (bars mode). Both are in the GUI's Reactive tab (done 2026-11-22; verified: modes start/stop, preview, no UI errors; the equalizer's audio thread COM fix is verified only for "no error" - hear it with music playing).
 2b. From the app's English strings (`research/ak980_extract/en_strings.txt`): key response levels 1-5, Fn Momentary/Toggle,
    3 exclusive configs, lighting-scheme import/export, TFT frame editor + GIF export.

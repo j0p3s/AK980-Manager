@@ -47,7 +47,7 @@ Use as a library: `import ak980; kb = ak980.Keyboard(); kb.set_lighting('Spectru
 ## Limitations
 
 * USB cable only (2.4G dongle / Bluetooth not tested).
-* Macros: typed the way your Windows layout types them (capitals, symbols, AltGr, accents); no mouse events, no repeat count.
+* Macros: typed the way your Windows layout types them (capitals, symbols, AltGr, accents); mouse clicks with {click} / {rightclick} / {middleclick} / {wait 500}; the keyboard has no repeat count.
 * Lighting effect ids beyond Static, Spectrum, Outward and Rolling are inferred from the list order; "LED Off" is not
   implemented.
 * **Real-time Lighting and Music Rhythm are not supported.** The stream format is known (`04 20`, per-key colours at ~20 fps,
