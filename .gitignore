@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+# reverse-engineering material stays local: raw USB captures (contain traffic of other devices) and the vendor's installer files
+research/
+*.pcap
+*.pcapng
+hid_log.txt
+captures/

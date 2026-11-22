@@ -1,0 +1,64 @@
+# Handoff — AK980 Manager
+
+Last updated: 2026-11-22. Repository: https://github.com/j0p3s/AK980-Manager · License: GPL-3.0-or-later.
+
+## What this is
+English control software for the user's **AJAZZ AK980 V2 PRO** keyboard (Sonix `0C45:8009`), because the official app is Chinese-only.
+Python + Tkinter, talks to the keyboard through the Windows HID API with `ctypes` (no extra dependencies except Pillow for the screen).
+The protocol was reverse engineered from the official app; the full description is in [docs/PROTOCOL.md](docs/PROTOCOL.md).
+
+## State: working, tested on the real keyboard (USB cable)
+| Feature | Status |
+|---|---|
+| Lighting effects, colour, brightness, speed | works (effect ids 1, 8, 9, 11 seen from the official app; the rest inferred from list order; direction byte and "LED Off" untested) |
+| Keymap Top layer + Fn layer, media keys, modifiers, reset | works (Caps→Z, A→Volume+, B→Left Shift, Fn Q→W captured; Caps→Z and reset verified by typing) |
+| Macros (text typing) assigned to a key | works (macro "ab" on F typed "ab"); no mouse events / repeat count / capitals |
+| Per-key RGB | works (verified by eye); needs "write table, wait until idle, then mode 0x80" |
+| TFT screen upload (240×135 RGB565, ≤140 frames) | works (own image and a user image shown); must be paced ~140 ms per 4 KB chunk |
+| System: sleep time, key response level | sent byte-identical to the app's packets; **effect not observable** by eye, so only matched to captures |
+| Clock sync | sent like the app does; screen clock not checked visually |
+| GUI tabs: Lighting, Keys, Macros, Per-key, Screen, System | start and connect; the Macros, System and Per-key tabs were smoke-tested but not clicked through at length |
+
+## How to run
+`pip install -r requirements.txt` then `python ak980_gui.py` (or double-click `AK980 Manager.pyw`). **Close the official app first.**
+A desktop shortcut "AK980 Manager.lnk" was created on the user's desktop (target: `pythonw.exe` of Python 3.15 + the .pyw).
+
+## Things that bite (read before touching the keyboard)
+* The official app (`DeviceDriver.exe`) polls ~12 Hz and **breaks any other writer**; it also **re-applies its saved profile at start-up**.
+  Its profile still contains the **test remaps/macros from this session** (A→Volume+, B→Left Shift, F→macro "New Macro 1",
+  G→"New Macro 2", Fn-layer Q→W, two test macros). If the user ever starts the official app, those come back — reset with
+  the Keys tab "Reset all keys to default" afterwards, or clear them in the official app.
+* After a table write the keyboard is **busy** (echo byte 3 = `FF`) and ignores commands for a while → `Keyboard.wait_ready()`.
+  Several early "no change" results were this, not a wrong packet.
+* Screen upload faster than ~140 ms/chunk stalls at 93 % (last chunk dropped); wait ~1.5 s before closing the handles.
+* A Static effect with an empty user table is **dark** (Static shows the per-key table). Pick another effect or fill the Per-key tab.
+* **Never** send "Reset Keyboard" / "Factory Reset" or firmware commands; they were never captured on purpose.
+* Writing a keymap replaces the *whole* table of that layer; the GUI always writes both layers.
+
+## Code map
+* `ak980.py` — `Keyboard`: `set_lighting`, `set_keymap(entries, layer)`, `set_macros`, `set_user_lighting`, `set_system`, `set_time`,
+  `upload_screen`, `wait_ready`; `find_path()` enumerates the HID interface with SetupAPI.
+* `ak980_gui.py` — `App` (notebook + a worker thread that coalesces lighting writes), `KeysTab`, `MacrosTab`, `PerKeyTab`,
+  `ScreenTab`, `SystemTab`. Settings in `%APPDATA%\AK980Manager\{keymap,macros,perkey}.json`.
+* `keys.py` — generated from the official `rgb-keyboard.xml` (97 keys: key_index, name, HID usage, light_index, row, col).
+* `tools/frida_hid_logger.py`, `tools/usbpcap_capture.ps1` — how new commands were decoded.
+
+## How the reverse engineering was done (to repeat for new features)
+1. Unpacked the Inno Setup installer with `innoextract` (never ran the installer): config shows VID/PID/interfaces, layout xml has keys.
+2. USBPcap + Wireshark only showed polling at first; the breakthrough was **Frida hooks on `HidD_SetFeature`/`WriteFile`**
+   attached to the running official app (`tools/frida_hid_logger.py <pid>`), changing one setting at a time.
+3. Verified every decoded format by rebuilding the captured bytes offline, then by sending them with the official app closed.
+
+## Local-only material (not in git)
+`D:\AK980-Manager\research\` — raw USB captures (contain other devices' traffic: mouse, camera, storage), Frida logs and the
+unpacked vendor installer. It is in `.gitignore` on purpose; do not publish it.
+
+## Tools installed on the user's machine during this work (safe to uninstall)
+7-Zip, innoextract, USBPcap (driver + needs reboot to capture), Wireshark, and `pip install frida frida-tools`.
+
+## Open work / ideas
+1. Macros: mouse events, repeat count, modifier events (capital letters, symbols) — capture the app recording Shift+A and a click.
+2. "Real-time Lighting" effect list and Music Rhythm — find out whether the keyboard or the PC drives them.
+3. Verify the remaining effect ids, "LED Off", direction byte, key response level 1, and the clock on the screen by eye.
+4. 2.4G dongle (`0C45:FEFE`, interface MI_03) and Bluetooth modes.
+5. Polish: profiles (the app has 3 "exclusive configs"), import/export, a proper installer or PyInstaller build, tests for the table builders.
