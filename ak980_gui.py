@@ -17,6 +17,7 @@ import tkinter as tk
 import ak980
 import pages
 import theme
+import tray
 from theme import C, Btn, label
 
 NAV = [('Lighting', '☀', pages.LightingPage), ('Per-key', '▦', pages.PerKeyPage), ('Reactive', '♫', pages.ReactivePage),
@@ -89,7 +90,9 @@ class App(tk.Tk):
         self.light.update(pages.load_json(pages.LIGHT_FILE, {}))
         self._build()
         threading.Thread(target=self._worker, daemon=True).start()
-        self.protocol('WM_DELETE_WINDOW', self._close)
+        self.tray = tray.Tray(_resource('assets/icon.ico'), 'AK980 Manager', lambda: self.post(self.restore), lambda: self.post(self.quit_app))
+        self.tray.start()
+        self.protocol('WM_DELETE_WINDOW', self._on_x)
         self.after(25, self._drain)
         self.after(200, self._tick_connect)
         self.after(500, self._tick_official)
@@ -292,7 +295,27 @@ class App(tk.Tk):
             except OSError as e:
                 self.post(self.on_disconnect, e)
 
+    def restore(self):
+        """Bring the window back from the tray / taskbar."""
+        self.deiconify()
+        self.lift()
+        self.attributes('-topmost', True)
+        self.after(150, lambda: self.attributes('-topmost', False))
+        self.focus_force()
+
+    def _on_x(self):
+        """The X button hides to the tray (lighting effects keep running); Quit is in the tray menu."""
+        if self.tray.ok:
+            self.withdraw()
+            self.status_msg('Still running in the tray - right-click the icon and choose Quit to exit.', 'ok')
+        else:
+            self._close()
+
+    def quit_app(self):
+        self._close()
+
     def _close(self):
+        self.tray.stop()
         r = self.pages['Reactive'].runner
         if r and r.running:
             r.stop()
@@ -334,9 +357,12 @@ def main():
     if r == 'updated':                             # new program files were downloaded: start again so they are the ones running
         subprocess.Popen([sys.executable] + sys.argv)
         sys.exit(0)
+    if tray.already_running():                     # one copy only: show the running one instead
+        if tray.show_running_instance():
+            sys.exit(0)
     app = App()
-    if '--startup' in sys.argv:                    # started by the Windows-startup task: begin minimised
-        app.iconify()
+    if '--startup' in sys.argv:                    # started by the Windows-startup task: begin in the tray
+        app.withdraw() if app.tray.ok else app.iconify()
     app.mainloop()
 
 
