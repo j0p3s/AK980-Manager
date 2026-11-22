@@ -1144,6 +1144,15 @@ class SystemPage(Page):
         self.auto_btn.pack(anchor='w')
         self.auto_msg = label(st.body, '', 10, False, C['muted'], C['card'])
         self.auto_msg.pack(anchor='w', pady=(8, 0))
+        win = Card(self, 'Window')
+        win.pack(fill='x', pady=(14, 0))
+        label(win.body, 'What the X button of the window does. Hiding to the tray keeps lighting effects and PC actions running.', 9,
+              False, C['muted'], C['card'], justify='left', wraplength=720).pack(anchor='w', pady=(0, 10))
+        import appsettings
+        self.close_mode = ttk.Combobox(win.body, values=['Hide to the tray', 'Quit the program'], state='readonly', width=24)
+        self.close_mode.set('Hide to the tray' if appsettings.get('close_to_tray') else 'Quit the program')
+        self.close_mode.bind('<<ComboboxSelected>>', lambda e: appsettings.set('close_to_tray', self.close_mode.get() == 'Hide to the tray'))
+        self.close_mode.pack(anchor='w')
         soft = Card(self, 'Software')
         soft.pack(fill='x', pady=14)
         self.ver = label(soft.body, '', 10, False, C['muted'], C['card'])

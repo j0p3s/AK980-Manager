@@ -37,7 +37,7 @@ Your settings live in `%APPDATA%\AK980Manager` and are never touched by an updat
 
 Building the `.exe` yourself: `python tools/build_exe.py` (PyInstaller), see the header of that file for publishing a release.
 
-1. Plug the keyboard in with the **USB cable** (wired mode) and set it to USB mode.
+1. Plug the keyboard in with the **USB cable** (wired mode), or use the **2.4G dongle** (lighting, keys incl. the Fn layer, macros, per-key colours, system settings and Music Rhythm "Bars" work over it).
 2. **Close the official AJAZZ app first** (also its tray icon). It polls the keyboard about 12 times a second, which breaks
    writes, and it re-applies its own saved profile every time it starts — overwriting what you set here.
 3. Settings are remembered in `%APPDATA%\AK980Manager` (`keymap.json`, `macros.json`, `perkey.json`).
@@ -46,7 +46,7 @@ Use as a library: `import ak980; kb = ak980.Keyboard(); kb.set_lighting('Spectru
 
 ## Limitations
 
-* USB cable only (2.4G dongle / Bluetooth not tested).
+* Over the 2.4G dongle the screen editor, key glow and Bass pulse are not available (the official app does not offer them there either); Bluetooth is not supported.
 * Macros: typed the way your Windows layout types them (capitals, symbols, AltGr, accents); mouse clicks with {click} / {rightclick} / {middleclick} / {wait 500}; macro play modes: once, N times, until pressed again, while held. PC actions (open program / website / file, send text) work while the manager is running.
 * Lighting effect ids beyond Static, Spectrum, Outward and Rolling are inferred from the list order; "LED Off" is not
   implemented.

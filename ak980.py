@@ -405,7 +405,7 @@ class DongleKeyboard:
                 break
             self._acks.put(buf.raw[1:got.value])
 
-    def _send(self, body, retries=5):
+    def _send(self, body, retries=10):
         """Send one 32-byte command and wait for the dongle's answer. The wireless link sleeps when idle and the first packet after a
         pause can be lost, so an unanswered command is sent again (up to `retries` times)."""
         b = bytearray(32)
@@ -444,32 +444,145 @@ class DongleKeyboard:
         usage = next(k[2] for k in keys.KEYS if k[0] == idx)
         return (0x02, 1 << (usage - 0xE0), 0) if 0xE0 <= usage <= 0xE7 else (0x02, 0, usage)
 
+    def _write32(self, body):
+        b = bytearray(32)
+        b[:len(body)] = body
+        b[31] = sum(b[:31]) & 0xFF
+        written = w.DWORD()
+        if not k32.WriteFile(self._hw, bytes([0]) + bytes(b), 33, ctypes.byref(written), None) or written.value != 33:
+            raise OSError('dongle write failed (error %d)' % ctypes.get_last_error())
+
+    def _bulk_table(self, cmd, tab):
+        """Write a whole 576-byte key table the way the official app does: 28-byte chunks `[cmd, 0x1c, seq] + data`, a shorter
+        footer (16 bytes + `00 cmd len seq`). The dongle does not answer these, so the caller wakes the link first."""
+        tab = bytearray(tab)
+        for seq in range(20):
+            self._write32(bytes([cmd, 0x1C, seq]) + bytes(tab[seq * 28:seq * 28 + 28]))
+            time.sleep(0.025)                                  # the official app paces its chunks like this
+        self._write32(bytes([cmd, 0x10, 20]) + bytes(tab[560:576]) + bytes([0, cmd, 0x10, 20]))
+
     def set_keymap(self, entries, layer='top'):
         """entries: {key_index: (type, b1, b2)}. Over the dongle each key is its own packet, so keys that an earlier call changed
-        and that are not listed now get their default function written back (remembered in dongle_touched.json)."""
-        if layer != 'top':
-            raise OSError('The Fn layer cannot be set over 2.4G yet - use the USB cable for it.')
+        and that are not listed now get their default function written back (remembered in dongle_touched.json).
+        Top layer: single-key commands `03 04`. Fn layer: single-key commands `0d 04`; an empty Fn table is always written first
+        (a bulk write, the way the official app starts), then the keys."""
+        if layer not in ('top', 'fn'):
+            raise ValueError(layer)
         import json
         import os
         store = os.path.join(os.environ.get('APPDATA', '.'), 'AK980Manager', 'dongle_touched.json')
         try:
-            touched = set(json.load(open(store, encoding='utf-8')))
+            data = json.load(open(store, encoding='utf-8'))
         except (OSError, ValueError):
-            touched = set()
+            data = {}
+        if isinstance(data, list):                    # older file: Top layer only
+            data = {'top': data}
+        touched = set(data.get(layer, []))
         todo = {int(i): tuple(e) for i, e in entries.items()}
-        for i in touched - set(todo):
-            todo[i] = self._default_entry(i)
         with self.lock:
+            if layer == 'top':
+                for i in touched - set(todo):
+                    todo[i] = self._default_entry(i)
+            else:
+                try:
+                    self._send(bytes([0x20, 0x01]), retries=2)  # wake the link: bulk chunks get no answer
+                except OSError:
+                    pass
+                tab = bytearray(576)
+                tab[574:576] = bytes([0xAA, 0x55])
+                self._bulk_table(0x12, tab)
+                time.sleep(1.4)
+            cmd = 0x03 if layer == 'top' else 0x0D
             for i, e in sorted(todo.items()):
-                self._send(bytes([0x03, 0x04, i]) + bytes(e[:3]))
+                self._send(bytes([cmd, 0x04, i]) + bytes(e[:3]))
+        data[layer] = sorted(entries)
         os.makedirs(os.path.dirname(store), exist_ok=True)
         with open(store, 'w', encoding='utf-8') as f:
-            json.dump(sorted(entries), f)
+            json.dump(data, f)
+
+    def _send_body(self, cmd, body14):
+        """`cmd 10 00` + the wired 64-byte body cut to 14 bytes + `aa 55` (system, clock)."""
+        with self.lock:
+            self._send(bytes([cmd, 0x10, 0x00]) + bytes(body14[:14]) + bytes([0xAA, 0x55]))
+
+    def set_system(self, sleep=2, level=2, fn_toggle=False):
+        """Same body as the wired `04 17` packet, sent as `07 10 00 ...` (captured). The keyboard ignores a system packet right
+        after a table write, so wait like the wired version does."""
+        body = bytearray(14)
+        body[1] = 1
+        body[5] = 1 if fn_toggle else 0
+        body[6] = sleep
+        body[8] = level
+        time.sleep(0.6)
+        self._send_body(0x07, body)
+
+    def set_time(self, when=None):
+        """Clock of the screen: `0c 10 00 00 01 5a yy mm dd hh mm ss ... aa 55` (captured)."""
+        import datetime
+        t = when or datetime.datetime.now()
+        body = bytes([0x00, 0x01, 0x5A, t.year % 100, t.month, t.day, t.hour, t.minute, t.second]) + bytes(5)
+        self._send_body(0x0C, body)
+
+    def set_user_lighting(self, colors, brightness=5, default=(0, 0, 0)):
+        """Per-key colours: select user mode (`05 10 00 80 ...`), then the 576-byte [light_index, R, G, B] table as cmd `14`
+        bulk chunks (the official app does this twice; once is enough here but the wireless link can drop chunks, so the
+        table is sent twice with the mode packet in between)."""
+        import keys as _keys
+        tab = bytearray(576)
+        for k in _keys.KEYS:
+            li = k[3]
+            r, g, b = colors.get(li, default)
+            tab[4 * li:4 * li + 4] = bytes([li, r, g, b])
+        tab[574:576] = bytes([0xAA, 0x55])
+        mode = bytes([0x05, 0x10, 0x00, 0x80] + [0] * 8 + [max(0, min(5, brightness)), 0, 0, 0, 0, 0xAA, 0x55])
+        with self.lock:
+            for _ in range(2):
+                self._send(mode)
+                self._bulk_table(0x14, tab)
+                time.sleep(1.0)
+
+    def set_macros(self, macros):
+        """Macro table as cmd `09` bulk chunks (28 data bytes each, the last chunk carries `aa 55` in its final two bytes).
+        Length rule from the official capture: end of macro data // 28 + 2 chunks (one 2-key macro = 17 chunks)."""
+        tab = Keyboard.macro_table(macros, min_packets=1)
+        end = max(400, len(tab[:-2].rstrip(bytes(1))))
+        n = max(end // 28 + 2, 17)
+        out = bytearray(n * 28)
+        out[:min(end, len(tab) - 2)] = tab[:min(end, len(tab) - 2)]
+        out[-2:] = bytes([0xAA, 0x55])
+        with self.lock:
+            for rep in range(2):
+                for seq in range(n - 1):
+                    self._write32(bytes([0x09, 0x1C, seq]) + bytes(out[seq * 28:seq * 28 + 28]))
+                    time.sleep(0.025)
+                self._write32(bytes([0x09, 0x14, n - 1]) + bytes(out[(n - 1) * 28:]))
+                time.sleep(1.0)
 
     def _unsupported(self, *a, **k):
         raise OSError('This is not available over 2.4G yet - use the USB cable.')
 
-    set_macros = set_user_lighting = set_system = set_time = upload_screen = stream_realtime = realtime_frame = _unsupported
+    def music_frame(self, levels):
+        """One Music Rhythm frame (captured from the official app): `0b 1c 00 04 00 64` + 19 column levels (0-6). The keyboard
+        draws the equaliser itself, so no colours are sent; the official app streams about 33 of these per second."""
+        lv = bytes(max(0, min(6, int(v))) for v in levels[:19])
+        self._write32(bytes([0x0B, 0x1C, 0x00, 0x04, 0x00, 0x64]) + lv)
+
+    def stream_music(self, levels_fn, seconds, fps=30, stop=None):
+        """Call levels_fn(t) -> 19 levels (0-6) for `seconds` seconds at about `fps` frames/s (stop: threading.Event)."""
+        with self.lock:
+            t0 = time.time()
+            n = 0
+            while time.time() - t0 < seconds and not (stop and stop.is_set()):
+                t = time.time() - t0
+                self.music_frame(levels_fn(t))
+                n += 1
+                time.sleep(max(0.0, n / fps - (time.time() - t0)))
+            self.music_frame([0] * 19)
+
+    def stream_realtime(self, *a, **k):
+        raise OSError('Per-key real-time effects need the USB cable; over 2.4G only Music Rhythm "Bars" works.')
+
+    upload_screen = realtime_frame = _unsupported
 
 
 def connect():

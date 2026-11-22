@@ -207,7 +207,16 @@ class Runner:
                 self.on_frame(colors)
             return colors
         try:
-            self.kb.stream_realtime(frame, 10 ** 9, fps=self.fps, stop=self.stop_event)
+            if getattr(self.kb, 'wireless', False):         # 2.4G: the keyboard draws the equaliser from 19 column levels
+                if getattr(self.effect, 'mode', None) != 'Bars' or not hasattr(self.effect, 'level'):
+                    raise OSError('This effect needs the USB cable. Over 2.4G only Music Rhythm "Bars" works.')
+
+                def levels(t):
+                    frame(t)
+                    return [round(float(v) * ROWS) for v in self.effect.level]
+                self.kb.stream_music(levels, 10 ** 9, fps=30, stop=self.stop_event)
+            else:
+                self.kb.stream_realtime(frame, 10 ** 9, fps=self.fps, stop=self.stop_event)
         except Exception as e:                 # keyboard unplugged, audio device lost, ...
             err = e
         finally:

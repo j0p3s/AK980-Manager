@@ -253,7 +253,7 @@ class App(tk.Tk):
             try:
                 self.kb = ak980.connect()
                 self._draw_pill(True)
-                self.status_msg('Keyboard connected' + (' over 2.4G (lighting and keys only)' if getattr(self.kb, 'wireless', False) else ''), 'ok')
+                self.status_msg('Keyboard connected' + (' over 2.4G (screen and real-time effects need the USB cable)' if getattr(self.kb, 'wireless', False) else ''), 'ok')
             except OSError:
                 self._draw_pill(False)
                 self.status_msg('Keyboard not found - plug it in with the USB cable (wired mode).', 'err')
@@ -321,8 +321,10 @@ class App(tk.Tk):
         self.focus_force()
 
     def _on_x(self):
-        """The X button hides to the tray (lighting effects keep running); Quit is in the tray menu."""
-        if self.tray.ok:
+        """The X button hides to the tray (lighting effects keep running) unless the System page says to quit; Quit is also in
+        the tray menu."""
+        import appsettings
+        if self.tray.ok and appsettings.get('close_to_tray'):
             self.withdraw()
             self.status_msg('Still running in the tray - right-click the icon and choose Quit to exit.', 'ok')
         else:

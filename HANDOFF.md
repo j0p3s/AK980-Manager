@@ -1,7 +1,7 @@
 # Handoff — AK980 Manager
 
 Last updated: 2026-11-22 (third long session: key functions, macros, profiles, screen editor, lighting schemes, 2.4G dongle, Fn layer solved, dongle-only test).
-Repository: https://github.com/j0p3s/AK980-Manager · License: GPL-3.0-or-later · latest release **v1.0.5**.
+Repository: https://github.com/j0p3s/AK980-Manager · License: GPL-3.0-or-later · latest release **v1.0.6**.
 
 ## What this is
 English control software for the user's **AJAZZ AK980 V2 PRO** keyboard (Sonix `0C45:8009` wired, `0C45:FEFE` 2.4G dongle), because the official app is Chinese-only.
@@ -23,7 +23,7 @@ The user is Portuguese (**Portuguese Windows layout**, ANSI keyboard, no Print S
 | Reactive: key glow, Music Rhythm | glow verified; equalizer verified by eye from CLI; GUI audio path only checked for "no error"; bass pulse never eyeballed |
 | System: sleep, key response, clock | sent byte-identical to the app, effect not observable by eye |
 | Start with Windows (admin task), tray icon, single instance, centred window | verified by the user (sign-in start, tray, PC actions as admin); self-update of the exe verified on real releases |
-| **2.4G dongle** (`ak980.DongleKeyboard`, `connect()`) | lighting + Top-layer keys **verified with the cable unplugged** (dongle alone, 2026-11-22). Everything else, Fn layer included, not implemented (see below) |
+| **2.4G dongle** (`ak980.DongleKeyboard`, `connect()`) | lighting + Top-layer keys **verified with the cable unplugged** (dongle alone, 2026-11-22). **Fn layer, Fn Toggle (system packet), macros, per-key colours** verified over the dongle alone (`research/logs/_dongle_fn_test.py`, `_dongle_toggle_test.py`, `_dongle_macro_perkey_test.py` record the typed text per phase); clock packet acked but not observable. **Music Rhythm "Bars"** verified over the dongle with live audio (`0b` frames of 19 column levels, the keyboard draws it). Key glow, Bass pulse (per-key colours) need the cable; screen upload over 2.4G: the official app has no LCD tab on the dongle, so not available |
 | **Fn layer / Fn Momentary-Toggle** (cable) | **verified** with our own code (Fn+A->B, Fn+J->K; Momentary and Toggle). Fn+Q and Fn+1 do NOT work, even when the official app writes them (firmware-reserved) |
 
 ## How to run
@@ -77,9 +77,8 @@ the user to make **specific assignments** in its UI and Apply once, then decode 
 Its English strings: `research/ak980_extract/en_strings.txt`. Always rebuild the captured bytes offline, then verify on hardware (the user presses keys and reports).
 
 ## Open work / ideas
-1. **Fn-layer support over the dongle** (Fn layer + Momentary/Toggle are verified on the cable). Also check the GUI's System page applies Toggle correctly after the `set_system` timing fix.
-2. **2.4G leftovers**: macros, per-key colours, system settings, clock, real-time lighting (key glow / Music Rhythm), screen upload over the dongle.
+1. Check the GUI's System page applies Toggle correctly (wired and 2.4G) after the `set_system` timing fix; check the GUI over the dongle (it has not been run with the cable out).
+2. **2.4G leftovers**: none planned (key glow / Bass pulse / screen are not offered by the official app over the dongle). Run the GUI with the cable out and check every page.
 3. Real-time Lighting scheme export (only the per-key scheme was captured), more Music Rhythm modes of the official app.
 4. Still unverified on hardware: effect ids 2-7, 10, 12+, "LED Off", direction byte, key response level 1, the screen clock, My Computer/Copy/Paste/Cut shortcuts, Music Rhythm in the GUI with music, bass pulse.
-5. Polish: the GUI's look was never seen by the assistant (ask the user for feedback), a setting for the X button (always hides to tray), high-DPI scaling (fixed-size widgets),
-   on-screen keycap legends are ANSI, tests for the table builders.
+5. Polish left: high-DPI scaling was deliberately NOT done (fixed-size widgets; the program runs DPI-virtualised, fine but slightly soft - needs a visual pass on a scaled screen), on-screen keycap legends are ANSI, the GUI's look was never seen by the assistant (ask the user for feedback). Done in 1.0.6: X-button setting (System > Window, `appsettings.py`), tests (`python -m unittest discover -s tests`).

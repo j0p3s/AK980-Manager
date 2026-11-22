@@ -148,5 +148,9 @@ the firmware update path, lighting effect "LED Off".
   whole-table write; restoring a key = writing its default entry (`02 00 <usage>`, modifiers `02 <mask> 00`).
 * Lighting: `05 10 00` + the same 16-byte block as the wired lighting packet (`effect R G B 0 0 0 0 colorful brightness speed direction 0 0 AA 55`).
 * Keep-alive from the official app: `20 01 ...` every 15 s.
-* Not captured yet over the dongle: Fn layer, macros, per-key colours, screen upload, real-time lighting, system settings.
+* Fn layer over the dongle (verified): first write an empty Fn table (cmd `12` bulk chunks, ~25 ms apart, footer `12 10 14`), wait ~1.4 s, then single keys `0d 04 <key> <type> <b1> <b2>` (acked like `03 04`). Without the bulk write the keys were acked but had no effect. Resetting = the empty table again.
+* Clock (acked): `0c 10 00 00 01 5a yy mm dd hh mm ss 00*5 aa 55`. System (verified, Fn Toggle works): `07 10 00` + wired body[0:14] + `aa 55`, send ~0.6 s after any table write.
+* Per-key colours (verified): `05 10 00 80 00*8 <brightness> 00*4 aa 55` (user mode), then cmd `14` bulk table (same 28-byte chunk format as the key tables, 576 bytes of [light_index R G B]); sent twice with the mode packet before each.
+* Macros (verified): cmd `09` bulk, 28-byte chunks `09 1c seq`, last chunk `09 14 seq` with `aa 55` in its final two data bytes; table = wired macro table, length rule end//28 + 2 chunks (17 for one 2-key macro). Key entry type 06 via `03 04` as usual.
+* Music Rhythm (verified): `0b 1c 00 04 00 64` + 19 column levels (0-6), ~30-33 frames/s, no ack; the keyboard draws the equaliser. No per-key real-time stream and no screen tab exist over the dongle in the official app.
 * Bluetooth: the official app does not support keyboard settings there, so nothing to implement.
