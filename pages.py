@@ -11,7 +11,7 @@ from tkinter import colorchooser, filedialog, messagebox, ttk
 import ak980
 import keys
 import theme
-from keyboard_view import KeyboardView
+from keyboard_view import DUAL, KeyboardView
 from theme import C, Btn, Card, Chip, Seg, Slider, Toggle, label, listbox
 
 DATA = os.path.join(os.environ.get('APPDATA', '.'), 'AK980Manager')
@@ -26,6 +26,23 @@ MODS = ['LCtrl', 'LShift', 'LAlt', 'LWin', 'RCtrl', 'RShift', 'RAlt', 'RWin']
 CHAR_USAGE = {c: 4 + i for i, c in enumerate('abcdefghijklmnopqrstuvwxyz')}
 CHAR_USAGE.update({c: 30 + i for i, c in enumerate('123456789')})
 CHAR_USAGE.update({'0': 39, ' ': 0x2C, '\n': 0x28, '\t': 0x2B})
+PRETTY = {'Shift_L': 'Left Shift', 'Shift_R': 'Right Shift', 'Ctrl_L': 'Left Ctrl', 'Ctrl_R': 'Right Ctrl', 'Win_L': 'Left Win',
+          'Alt_L': 'Left Alt', 'del': 'Delete', 'home': 'Home', 'page up': 'Page Up', 'page down': 'Page Down', 'CapsLock': 'Caps Lock',
+          'Backspace': 'Backspace', 'Num': 'Num Lock', '//': '/'}
+MOD_NAMES = {'LCtrl': 'Left Ctrl', 'LShift': 'Left Shift', 'LAlt': 'Left Alt', 'LWin': 'Left Win', 'RCtrl': 'Right Ctrl',
+             'RShift': 'Right Shift', 'RAlt': 'Right Alt', 'RWin': 'Right Win'}
+
+
+def key_label(name, col, row):
+    """Readable name of a key as shown in lists: '2' instead of '@2', 'Numpad 2' for the number pad."""
+    n = PRETTY.get(name, name)
+    if name in DUAL:
+        n = DUAL[name][0]
+    if col >= 15 and row >= 1:
+        n = 'Numpad ' + n
+    return n
+
+
 PALETTE = ['#ff3b3b', '#ff8a1f', '#ffd21f', '#3be07a', '#1fd6ff', '#4d6bff', '#a45cff', '#ff4fd0', '#ffffff']
 
 
@@ -390,11 +407,21 @@ class KeysPage(Page):
         super().__init__(parent, app)
         self.names = {}                     # label -> (key_index, default HID usage)
         self.by_li = {}                     # light index -> (key_index, name)
-        for idx, name, code, li, *_ in keys.KEYS:
+        self.chars = {}                     # HID usage -> (plain char, shifted char or '')
+        self.usage_label = {}               # HID usage -> label of the first key with that usage
+        for idx, name, code, li, row, col in keys.KEYS:
             n = html.unescape(name)
-            lab = n if n not in self.names else '%s (#%d)' % (n, idx)
+            lab = key_label(n, col, row)
+            lab = lab if lab not in self.names else '%s (#%d)' % (lab, idx)
             self.names[lab] = (idx, code)
             self.by_li[li] = (idx, lab)
+            self.usage_label.setdefault(code, lab)
+            if n in DUAL:
+                self.chars[code] = DUAL[n]
+            elif len(n) == 1 and n.isalpha():
+                self.chars[code] = (n.lower(), n.upper())
+            elif col >= 15 and len(lab) == 8 and lab[-1] in '0123456789':     # 'Numpad 7'
+                self.chars[code] = (lab[-1], '')
         self.idx2li = {v[0]: li for li, v in self.by_li.items()}
         self.maps = {'top': {}, 'fn': {}}
         raw = load_json(KEYMAP_FILE, {})
@@ -444,7 +471,21 @@ class KeysPage(Page):
         mods.pack(fill='x', pady=(10, 0))
         label(mods, 'With modifiers', 10, False, C['muted'], C['card']).pack(side='left', padx=(0, 10))
         for m in MODS:
-            Toggle(mods, m, self.mod_vars[m]).pack(side='left', padx=(0, 12))
+            Toggle(mods, m, self.mod_vars[m], command=self._preview).pack(side='left', padx=(0, 12))
+        self.target.bind('<<ComboboxSelected>>', lambda e: self._preview())
+        box = tk.Frame(b, bg=C['card2'], highlightthickness=1, highlightbackground=C['line'])
+        box.pack(fill='x', pady=(14, 0))
+        label(box, 'RESULT', 8, True, C['muted'], C['card2']).pack(anchor='w', padx=14, pady=(8, 0))
+        line = tk.Frame(box, bg=C['card2'])
+        line.pack(anchor='w', padx=14, pady=(2, 0))
+        label(line, 'Pressing', 10, False, C['muted'], C['card2']).pack(side='left')
+        self.res_from = label(line, '', 15, True, C['text'], C['card2'])
+        self.res_from.pack(side='left', padx=10)
+        label(line, 'types', 10, False, C['muted'], C['card2']).pack(side='left')
+        self.res_to = label(line, '', 15, True, C['accent_h'], C['card2'])
+        self.res_to.pack(side='left', padx=10)
+        self.res_note = label(box, '', 9, False, C['muted'], C['card2'], justify='left', wraplength=900)
+        self.res_note.pack(anchor='w', padx=14, pady=(0, 9))
         act = tk.Frame(b, bg=C['card'])
         act.pack(fill='x', pady=(12, 0))
         Btn(act, 'Assign', self.assign, 'primary', height=32).pack(side='left')
@@ -456,6 +497,7 @@ class KeysPage(Page):
         vals = list(MEDIA) if k == 'Media' else [m['name'] for m in self.app.macros] if k == 'Macro' else list(self.names)
         self.target.configure(values=vals, state='disabled' if k == 'Modifiers' else 'readonly')
         self.target.set('')
+        self._preview()
         if k == 'Macro' and not vals:
             self.target_hint.configure(text='No macros yet - create one on the Macros page.')
             self.target_hint.pack(side='left')
@@ -476,34 +518,123 @@ class KeysPage(Page):
         self.sel = li
         self.kv.set_marked({li})
         idx, lab = self.by_li[li]
-        self.sel_label.configure(text=lab)
+        dual = self.chars.get(self.names[lab][1])
+        self.sel_label.configure(text=lab + ('   (with Shift: %s)' % dual[1] if dual and dual[1] and not lab.startswith('Numpad') else ''))
         e = self.map.get(idx)
-        self.cur_label.configure(text=('Currently: ' + e['desc']) if e else 'Currently: default function')
+        self.cur_label.configure(text=('Saved: ' + self.describe(e)[1]) if e else 'Saved: default function (not remapped)')
+        self._load(e)
+
+    # ------------------------------------------------------------------ what a mapping does, in words
+    def describe(self, e, lab=None):
+        """(result text, explanation) for a mapping entry, or for the key's own default when e is None."""
+        if e is None:
+            u = self.names[lab][1] if lab else 0
+            ch = self.chars.get(u)
+            return (ch[0] if ch else (lab or '')), 'Default: the key does what its label says.'
+        t = e['t']
+        if t == 6:
+            return 'macro "%s"' % e.get('macro', ''), 'Runs the macro "%s" (text typed on the Macros page).' % e.get('macro', '')
+        if t == 3:
+            return e['desc'], 'Media function: %s.' % e['desc']
+        mask, u = e['a'], e['b']
+        mods = [m for m in MODS if mask & ak980.Keyboard.MOD[m]]
+        mnames = [MOD_NAMES[m] for m in mods]
+        if u == 0:
+            return ' + '.join(mnames) + ' held', 'Acts as %s.' % ' + '.join(mnames)
+        shift = any(m in ('LShift', 'RShift') for m in mods)
+        others = [m for m in mods if m not in ('LShift', 'RShift')]
+        ch = self.chars.get(u)
+        name = self.usage_label.get(u, 'key %d' % u)
+        if ch and not others:
+            out = ch[1] if shift and ch[1] else ch[0]
+            how = ' + '.join(mnames + [name])
+            return out, ('Sends %s, so the computer types "%s".' % (how, out)) if mods else 'Sends the plain key "%s".' % out
+        combo = ' + '.join(mnames + [name])
+        return combo, 'Sends the shortcut %s.' % combo
+
+    def _entry(self):
+        """The mapping the panel is currently set up to make (not yet assigned), or None if incomplete."""
+        k = self.kind.get()
+        mask = sum(ak980.Keyboard.MOD[m] for m in MODS if self.mod_vars[m].get())
+        t = self.target.get()
+        names = '+'.join(m for m in MODS if self.mod_vars[m].get())
+        if k == 'Key':
+            if not t:
+                return None
+            return {'t': 2, 'a': mask, 'b': self.names[t][1], 'desc': (names + '+' if mask else '') + t}
+        if k == 'Macro':
+            return {'t': 6, 'a': 0, 'b': 0, 'macro': t, 'desc': 'Macro: ' + t} if t else None
+        if k == 'Media':
+            if not t:
+                return None
+            u = MEDIA[t]
+            return {'t': 3, 'a': u & 0xFF, 'b': u >> 8, 'desc': t}
+        return {'t': 2, 'a': mask, 'b': 0, 'desc': names} if mask else None
+
+    def _preview(self):
+        """Refresh the RESULT box from the panel's current choices."""
+        if self.sel is None:
+            self.res_from.configure(text='-')
+            self.res_to.configure(text='-')
+            self.res_note.configure(text='Click a key on the keyboard above.')
+            return
+        idx, lab = self.by_li[self.sel]
+        self.res_from.configure(text=lab)
+        e = self._entry()
+        if e is None:
+            saved = self.map.get(idx)
+            out, why = self.describe(saved, lab)
+            self.res_to.configure(text=out)
+            self.res_note.configure(text=why + '   Choose a function above to change it.')
+            return
+        out, why = self.describe(e, lab)
+        self.res_to.configure(text=out)
+        same = self.map.get(idx) and all(self.map[idx].get(f) == e.get(f) for f in ('t', 'a', 'b', 'macro'))
+        self.res_note.configure(text=why + ('   Saved.' if same else '   Not saved yet: click Assign, then Apply to keyboard.'))
+
+    def _load(self, e):
+        """Show the saved mapping of the selected key in the panel's controls (or clear them for a default key)."""
+        for m in MODS:
+            self.mod_vars[m].set(False)
+        self.kind.set('Key')
+        self._kind_changed()
+        if e:
+            if e['t'] == 6:
+                self.kind.set('Macro')
+                self._kind_changed()
+                self.target.set(e.get('macro', ''))
+            elif e['t'] == 3:
+                self.kind.set('Media')
+                self._kind_changed()
+                self.target.set(e['desc'])
+            else:
+                for m in MODS:
+                    self.mod_vars[m].set(bool(e['a'] & ak980.Keyboard.MOD[m]))
+                if e['b'] == 0:
+                    self.kind.set('Modifiers')
+                    self._kind_changed()
+                else:
+                    self.target.set(self.usage_label.get(e['b'], ''))
+        self.mod_refresh()
+        self._preview()
+
+    def mod_refresh(self):
+        for w in self.panel.body.winfo_children():
+            self._refresh_toggles(w)
+
+    def _refresh_toggles(self, w):
+        if isinstance(w, Toggle):
+            w.refresh()
+        for c in w.winfo_children():
+            self._refresh_toggles(c)
 
     def assign(self):
         if self.sel is None:
             return
         idx, lab = self.by_li[self.sel]
-        k = self.kind.get()
-        mask = sum(ak980.Keyboard.MOD[m] for m in MODS if self.mod_vars[m].get())
-        t = self.target.get()
-        if k == 'Key':
-            if not t:
-                return
-            entry = {'t': 2, 'a': mask, 'b': self.names[t][1], 'desc': ('+'.join(m for m in MODS if self.mod_vars[m].get()) + '+' if mask else '') + t}
-        elif k == 'Macro':
-            if not t:
-                return
-            entry = {'t': 6, 'a': 0, 'b': 0, 'macro': t, 'desc': 'Macro: ' + t}
-        elif k == 'Media':
-            if not t:
-                return
-            u = MEDIA[t]
-            entry = {'t': 3, 'a': u & 0xFF, 'b': u >> 8, 'desc': t}
-        else:
-            if not mask:
-                return
-            entry = {'t': 2, 'a': mask, 'b': 0, 'desc': '+'.join(m for m in MODS if self.mod_vars[m].get())}
+        entry = self._entry()
+        if entry is None:
+            return
         entry['src'] = lab
         self.map[idx] = entry
         self._badges()

@@ -17,6 +17,19 @@ NAV_X, PAD_X = 15.25, 16.5
 ROW_GAP = 0.35         # extra gap under the F-key row
 
 
+# Keys with two legends in the layout file: name -> (plain character, shifted character). The file lists them as e.g. "@2".
+DUAL = {'~`': ('`', '~'), '!1': ('1', '!'), '@2': ('2', '@'), '#3': ('3', '#'), '$4': ('4', '$'), '%5': ('5', '%'), '^6': ('6', '^'),
+        '&7': ('7', '&'), '*8': ('8', '*'), '(9': ('9', '('), ')0': ('0', ')'), '_-': ('-', '_'), '+=': ('=', '+'), '{[': ('[', '{'),
+        '}}': (']', '}'), '|\\': ('\\', '|'), ':;': (';', ':'), '"\'': ("'", '"'), ',<': (',', '<'), '.>': ('.', '>'), '/?': ('/', '?')}
+
+
+def cap_text(n):
+    """Text on a keycap: dual-legend keys show the shifted character above the plain one, like the real keycap."""
+    if n in DUAL:
+        return DUAL[n][1] + chr(10) + DUAL[n][0]
+    return SHORT.get(n, n)
+
+
 def name_of(entry):
     n = html.unescape(entry[1])
     return n
@@ -100,9 +113,9 @@ class KeyboardView(tk.Canvas):
             x1, y1, x2, y2 = kx * u + 3, ky * u + 3, (kx + kw) * u + 1, (ky + kh) * u + 1
             poly = theme.rrect(self, x1, y1, x2, y2, max(4, u * 0.14), fill=C['key'], outline='')
             n = self.names[li]
-            txt = SHORT.get(n, n)
+            txt = cap_text(n)
             t = self.create_text((x1 + x2) / 2, (y1 + y2) / 2, text=txt, fill=C['keytext'],
-                                 font=theme.font(max(6, int(u * (0.22 if len(txt) > 3 else 0.27)))))
+                                 font=theme.font(max(6, int(u * (0.22 if len(txt) > 3 and chr(10) not in txt else 0.25)))))
             dot = self.create_oval(x2 - 10, y1 + 4, x2 - 4, y1 + 10, fill=C['warn'], outline='', state='hidden')
             self.items[li] = (poly, t, dot)
 
