@@ -16,6 +16,7 @@ import tkinter as tk
 
 import ak980
 import pages
+import pcactions
 import profiles
 import theme
 import tray
@@ -93,6 +94,8 @@ class App(tk.Tk):
         threading.Thread(target=self._worker, daemon=True).start()
         self.tray = tray.Tray(_resource('assets/icon.ico'), 'AK980 Manager', lambda: self.post(self.restore), lambda: self.post(self.quit_app))
         self.tray.start()
+        self.pc_listener = pcactions.Listener(lambda n: self.post(self._pc_key, n))
+        self.pc_listener.start()
         self.protocol('WM_DELETE_WINDOW', self._on_x)
         self.after(25, self._drain)
         self.after(200, self._tick_connect)
@@ -296,6 +299,18 @@ class App(tk.Tk):
             except OSError as e:
                 self.post(self.on_disconnect, e)
 
+    def _pc_key(self, n):
+        """A key set to a PC action was pressed: find what it was assigned to and do it."""
+        for layer in self.pages['Keys'].maps.values():
+            for e in layer.values():
+                if e.get('t') == 5 and e.get('a') == 2 and e.get('b') == n and 'action' in e:
+                    ac = dict(e['action'])
+                    threading.Thread(target=lambda: self.post(self._pc_done, pcactions.run(ac), ac), daemon=True).start()
+                    return
+
+    def _pc_done(self, err, ac):
+        self.status_msg(('Could not run: ' + err) if err else '%s done' % ac.get('type', 'Action'), 'err' if err else 'ok')
+
     def restore(self):
         """Bring the window back from the tray / taskbar."""
         self.deiconify()
@@ -317,6 +332,7 @@ class App(tk.Tk):
 
     def _close(self):
         self.tray.stop()
+        self.pc_listener.stop()
         r = self.pages['Reactive'].runner
         if r and r.running:
             r.stop()

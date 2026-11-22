@@ -49,6 +49,11 @@ All multi-packet tables end with the two bytes `AA 55`.
 * Macro key `[06, slot, mode, count]` (captured 2026-11-22, verified): mode 0 once, 1 multiple times (count 1-255 in byte 3),
   2 loop until the key is pressed again, 3 play while the key is held. Disable key `[05, 03, 0, 0]`. The app's Windows shortcuts are plain
   key combinations: Show Desktop = LWin+D, Lock Computer = LWin+L, Close Window = LCtrl+W, Switch Windows = LAlt+Tab.
+* PC-side actions (Open Program / Website / File, Send Text; captured + verified 2026-11-22): key entry `[05, 02, N, 0]` with N = 1..255
+  chosen by the app. The keyboard stores nothing else: on a press it sends the input report `05 00 N 00` on the vendor interface
+  (`MI_01&Col05`, usage page 0xFFFF, 4-byte reports, no release report) and the PC program acts (`pcactions.py`).
+* Multi-Key = key sequence `[07, usage1, usage2, usage3]` (3rd optional; verified on hardware 2026-11-22: `07 04 05 06` types abc). The keys are
+  **tapped one after another**, not held together, so modifiers do not combine (the app's Ctrl+V entry `07 e0 19` taps Ctrl, then V).
 * Mouse function `[01, class, value, 0]` (captured 2026-11-22, verified on hardware): class 1 = button bits (Left `01`, Right `02`, Middle `04`,
   Double Click `03`, Button 4/Back `08`, Button 5/Forward `10`), class 3 = wheel (Scroll Up `01`, Scroll Down `ff`).
 * Modifier mask: LCtrl 01, LShift 02, LAlt 04, LWin 08, RCtrl 10, RShift 20, RAlt 40, RWin 80.

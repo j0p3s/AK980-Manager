@@ -12,6 +12,7 @@ from tkinter import colorchooser, filedialog, messagebox, ttk
 import ak980
 import keys
 import layout
+import pcactions
 import theme
 from keyboard_view import DUAL, KeyboardView
 from theme import C, Btn, Card, Chip, Seg, Slider, Toggle, label, listbox
@@ -537,7 +538,7 @@ class KeysPage(Page):
         row = tk.Frame(b, bg=C['card'])
         row.pack(fill='x')
         label(row, 'Make it', 10, False, C['muted'], C['card']).pack(side='left', padx=(0, 10))
-        Seg(row, ('Key', 'Media', 'Mouse', 'Macro', 'Special', 'Modifiers'), self.kind, self._kind_changed, width=86).pack(side='left')
+        Seg(row, ('Key', 'Sequence', 'Media', 'Mouse', 'Macro', 'Special', 'PC action', 'Modifiers'), self.kind, self._kind_changed, width=80).pack(side='left')
         self.target = ttk.Combobox(row, state='readonly', width=24, height=18)
         self.target.pack(side='left', padx=14)
         self.target_hint = label(row, '', 10, False, C['muted'], C['card'])
@@ -551,6 +552,25 @@ class KeysPage(Page):
         self.loop_count = tk.IntVar(value=2)
         self.loop_spin = ttk.Spinbox(self.macro_opts, from_=1, to=255, width=5, textvariable=self.loop_count, command=self._preview)
         self.loop_spin.bind('<KeyRelease>', lambda e: self._preview())
+        self.two_opts = tk.Frame(b, bg=C['card'])
+        label(self.two_opts, 'then', 10, False, C['muted'], C['card']).pack(side='left', padx=(0, 10))
+        self.second = ttk.Combobox(self.two_opts, state='readonly', width=16)
+        self.second.pack(side='left')
+        self.second.bind('<<ComboboxSelected>>', lambda e: self._preview())
+        label(self.two_opts, 'then', 10, False, C['muted'], C['card']).pack(side='left', padx=10)
+        self.third = ttk.Combobox(self.two_opts, state='readonly', width=16)
+        self.third.pack(side='left')
+        self.third.bind('<<ComboboxSelected>>', lambda e: self._preview())
+        label(self.two_opts, 'Taps up to 3 keys one after another (the 3rd is optional).', 9, False, C['muted'], C['card']).pack(side='left', padx=12)
+        self.pc_opts = tk.Frame(b, bg=C['card'])
+        label(self.pc_opts, 'Value', 10, False, C['muted'], C['card']).pack(side='left', padx=(0, 10))
+        self.pc_value = tk.StringVar()
+        ttk.Entry(self.pc_opts, textvariable=self.pc_value, width=58).pack(side='left')
+        self.pc_value.trace_add('write', lambda *a: self._preview())
+        self.pc_browse = Btn(self.pc_opts, 'Browse...', self._browse, height=28, size=9)
+        self.pc_browse.pack(side='left', padx=8)
+        label(self.pc_opts, 'Runs on the PC: AK980 Manager must be running (it can start with Windows).', 9, False, C['muted'],
+              C['card']).pack(side='left', padx=8)
         mods = tk.Frame(b, bg=C['card'])
         self.mods_frame = mods
         mods.pack(fill='x', pady=(10, 0))
@@ -580,7 +600,7 @@ class KeysPage(Page):
 
     def _kind_changed(self):
         k = self.kind.get()
-        vals = list(MEDIA) if k == 'Media' else list(MOUSE) if k == 'Mouse' else list(SPECIAL) if k == 'Special' else [m['name'] for m in self.app.macros] if k == 'Macro' else list(self.names) + list(self.extra_keys) + list(self.char_entries)
+        vals = list(MEDIA) if k == 'Media' else list(MOUSE) if k == 'Mouse' else list(SPECIAL) if k == 'Special' else list(pcactions.TYPES) if k == 'PC action' else self._seq_keys() if k == 'Sequence' else [m['name'] for m in self.app.macros] if k == 'Macro' else list(self.names) + list(self.extra_keys) + list(self.char_entries)
         self.target.configure(values=vals, state='disabled' if k == 'Modifiers' else 'readonly')
         self.target.set('')
         if k == 'Macro':
@@ -588,12 +608,44 @@ class KeysPage(Page):
             self._mode_changed()
         else:
             self.macro_opts.pack_forget()
+        if k == 'Sequence':
+            opts = [''] + self._seq_keys()
+            self.second.configure(values=opts[1:])
+            self.third.configure(values=opts)
+            self.second.set('')
+            self.third.set('')
+            self.two_opts.pack(fill='x', pady=(10, 0), before=self.mods_frame)
+        else:
+            self.two_opts.pack_forget()
+        if k == 'PC action':
+            self.pc_opts.pack(fill='x', pady=(10, 0), before=self.mods_frame)
+        else:
+            self.pc_opts.pack_forget()
         self._preview()
         if k == 'Macro' and not vals:
             self.target_hint.configure(text='No macros yet - create one on the Macros page.')
             self.target_hint.pack(side='left')
         else:
             self.target_hint.pack_forget()
+
+    def _seq_keys(self):
+        """Keys that make sense in a tapped sequence (not the modifiers, which would be released at once)."""
+        return [l for l, (_, u) in self.names.items() if not 0xE0 <= u <= 0xE7] + list(self.extra_keys)
+
+    def _browse(self):
+        t = self.target.get()
+        if t == 'Open program':
+            f = filedialog.askopenfilename(filetypes=[('Programs', '*.exe *.bat *.cmd *.lnk'), ('All files', '*.*')])
+        elif t == 'Open file':
+            f = filedialog.askopenfilename()
+        else:
+            return
+        if f:
+            self.pc_value.set(os.path.normpath(f))
+
+    def _free_slot(self):
+        used = {e['b'] for m in self.maps.values() for e in m.values() if e.get('t') == 5 and e.get('a') == 2}
+        return next((n for n in range(1, 256) if n not in used), None)
 
     def _mode_changed(self):
         multi = self.play_mode.get() == PLAY_MODES[1]
@@ -677,6 +729,14 @@ class KeysPage(Page):
             how = {0: 'once', 1: '%d times' % e.get('count', 1), 2: 'until you press the key again',
                    3: 'for as long as you hold the key'}.get(e.get('mode', 0), 'once')
             return 'macro "%s"' % e.get('macro', ''), 'Plays the macro "%s" %s.' % (e.get('macro', ''), how)
+        if t == 7:
+            ns = [self.usage_label.get(u, 'key %d' % u) for u in (e['a'], e['b'], e.get('c', 0)) if u]
+            return ' then '.join(ns), 'Taps %s one after another (not held together).' % ', '.join(ns)
+        if t == 5 and e.get('a') == 2:
+            ac = e.get('action', {})
+            what = {'Open program': 'Opens the program', 'Open website': 'Opens the website', 'Open file': 'Opens the file',
+                    'Send text': 'Types the text'}.get(ac.get('type'), 'Runs')
+            return ac.get('type', 'PC action'), '%s %s. Done by AK980 Manager on the PC: it has to be running (tray).' % (what, ac.get('value', ''))
         if t == 5:
             return 'nothing', 'The key is disabled: pressing it does nothing.'
         if t == 3:
@@ -724,6 +784,25 @@ class KeysPage(Page):
                 return None
             mode = PLAY_MODES.index(self.play_mode.get())
             return {'t': 6, 'a': 0, 'b': 0, 'macro': t, 'mode': mode, 'count': self._loops() if mode == 1 else 0, 'desc': 'Macro: ' + t}
+        if k == 'Sequence':
+            both = {**self.names, **{l: (0, u) for l, u in self.extra_keys.items()}}
+            labs = [x for x in (t, self.second.get(), self.third.get()) if x]
+            if len(labs) < 2 or not t or not self.second.get() or any(x not in both for x in labs):
+                return None
+            us = [both[x][1] for x in labs]
+            e = {'t': 7, 'a': us[0], 'b': us[1], 'desc': ' then '.join(labs)}
+            if len(us) > 2:
+                e['c'] = us[2]
+            return e
+        if k == 'PC action':
+            val = self.pc_value.get()
+            if not t or not val.strip():
+                return None
+            old = self.map.get(self.by_li[self.sel][0]) if self.sel is not None else None
+            n = old['b'] if old and old.get('t') == 5 and old.get('a') == 2 else self._free_slot()
+            if n is None:
+                return None
+            return {'t': 5, 'a': 2, 'b': n, 'action': {'type': t, 'value': val}, 'desc': '%s: %s' % (t, val)}
         if k == 'Special':
             if not t:
                 return None
@@ -776,6 +855,17 @@ class KeysPage(Page):
                 self.play_mode.set(PLAY_MODES[min(3, e.get('mode', 0))])
                 self.loop_count.set(e.get('count') or 2)
                 self._mode_changed()
+            elif e['t'] == 7:
+                self.kind.set('Sequence')
+                self._kind_changed()
+                self.target.set(self.usage_label.get(e['a'], ''))
+                self.second.set(self.usage_label.get(e['b'], ''))
+                self.third.set(self.usage_label.get(e.get('c', 0), '') if e.get('c') else '')
+            elif e['t'] == 5 and e.get('a') == 2:
+                self.kind.set('PC action')
+                self._kind_changed()
+                self.target.set(e.get('action', {}).get('type', ''))
+                self.pc_value.set(e.get('action', {}).get('value', ''))
             elif e['t'] == 5:
                 self.kind.set('Special')
                 self._kind_changed()
@@ -851,7 +941,7 @@ class KeysPage(Page):
                         return None
                     layers[l][i] = (6, names.index(e['macro']), e.get('mode', 0), e.get('count', 0))
                 else:
-                    layers[l][i] = (e['t'], e['a'], e['b'])
+                    layers[l][i] = (e['t'], e['a'], e['b']) + ((e['c'],) if 'c' in e else ())
         return layers
 
     def apply(self):

@@ -113,6 +113,8 @@ class Keyboard:
     #   media key    : [0x03, usage_lo, usage_hi, 0]         (e.g. Volume Up = 0x00E9)
     #   macro        : [0x06, macro_slot, play_mode, loop_count]   (mode 0 once, 1 multiple times = loop_count 1-255,
     #                                                              2 stop when the key is pressed again, 3 until the key is released)
+    #   key sequence : [0x07, usage1, usage2, usage3]       (Multi-Key: the keys are TAPPED one after another, 3rd optional;
+    #                                                          verified: 07 04 05 06 types abc; modifiers are not held)
     #   disable key  : [0x05, 0x03, 0, 0]
     #   mouse        : [0x01, class, value, 0]               (class 1 = button bit, 3 = wheel; see MOUSE in pages.py)
     MOD = {'LCtrl': 0x01, 'LShift': 0x02, 'LAlt': 0x04, 'LWin': 0x08,
