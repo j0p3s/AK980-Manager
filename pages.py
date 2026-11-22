@@ -33,7 +33,9 @@ MOUSE = {'Left Click': (1, 0x01), 'Right Click': (1, 0x02), 'Middle Click': (1, 
 # Special key functions as the official app writes them (captured 2026-11-22). Shortcuts are plain key combinations.
 SPECIAL = {'Disable key (does nothing)': {'t': 5, 'a': 3, 'b': 0},
            'Show Desktop  (Win + D)': {'t': 2, 'a': 0x08, 'b': 0x07}, 'Lock Computer  (Win + L)': {'t': 2, 'a': 0x08, 'b': 0x0F},
-           'Close Window  (Ctrl + W)': {'t': 2, 'a': 0x01, 'b': 0x1A}, 'Switch Windows  (Alt + Tab)': {'t': 2, 'a': 0x04, 'b': 0x2B}}
+           'Close Window  (Ctrl + W)': {'t': 2, 'a': 0x01, 'b': 0x1A}, 'Switch Windows  (Alt + Tab)': {'t': 2, 'a': 0x04, 'b': 0x2B},
+           'My Computer  (Win + E)': {'t': 2, 'a': 0x08, 'b': 0x08}, 'Copy  (Ctrl + C)': {'t': 2, 'a': 0x01, 'b': 0x06},
+           'Paste  (Ctrl + V)': {'t': 2, 'a': 0x01, 'b': 0x19}, 'Cut  (Ctrl + X)': {'t': 2, 'a': 0x01, 'b': 0x1B}}
 PLAY_MODES = ['Play once', 'Play multiple times', 'Stop when the key is pressed again', 'Keep playing until the key is released']
 MODS = ['LCtrl', 'LShift', 'LAlt', 'LWin', 'RCtrl', 'RShift', 'RAlt', 'RWin']
 PRETTY = {'Shift_L': 'Left Shift', 'Shift_R': 'Right Shift', 'Ctrl_L': 'Left Ctrl', 'Ctrl_R': 'Right Ctrl', 'Win_L': 'Left Win',

@@ -48,7 +48,9 @@ All multi-packet tables end with the two bytes `AA 55`.
   `[03, usage_lo, usage_hi, 0]` (Volume Up = `0x00E9`), macro `[06, macro_number, 0, 0]`.
 * Macro key `[06, slot, mode, count]` (captured 2026-11-22, verified): mode 0 once, 1 multiple times (count 1-255 in byte 3),
   2 loop until the key is pressed again, 3 play while the key is held. Disable key `[05, 03, 0, 0]`. The app's Windows shortcuts are plain
-  key combinations: Show Desktop = LWin+D, Lock Computer = LWin+L, Close Window = LCtrl+W, Switch Windows = LAlt+Tab.
+  key combinations: Show Desktop = LWin+D, Lock Computer = LWin+L, Close Window = LCtrl+W, Switch Windows = LAlt+Tab, My Computer = LWin+E, Copy/Paste/Cut = LCtrl+C/V/X.
+  The app's menus offer nothing else: its Windows Shortcut list has only these 8 entries (no Log Off/Sleep/Shutdown/Restart) and its Multimedia
+  list is Play/Pause, Stop, Previous, Next, Volume +/- and Mute (all already in our Media list).
 * PC-side actions (Open Program / Website / File, Send Text; captured + verified 2026-11-22): key entry `[05, 02, N, 0]` with N = 1..255
   chosen by the app. The keyboard stores nothing else: on a press it sends the input report `05 00 N 00` on the vendor interface
   (`MI_01&Col05`, usage page 0xFFFF, 4-byte reports, no release report) and the PC program acts (`pcactions.py`).
