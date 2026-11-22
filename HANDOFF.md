@@ -72,7 +72,7 @@ unpacked vendor installer. It is in `.gitignore` on purpose; do not publish it.
 ## Open work / ideas
 0. Mouse-button key functions (Mouse Button 1-5 in the official key menu) — not captured yet.
 1. Macros: mouse events, repeat count, modifier events (capital letters, symbols) — capture the app recording Shift+A and a click.
-2. **Real-time Lighting** (SOLVED 2026-11-22, see docs/PROTOCOL.md): frames need the fixed slot order, a `04 02` packet and a status read (wait for `01`) after the header and after `04 02`. `tools/keypress_glow.py` (pressed keys light up and fade) works, verified on hardware. Still to do: put it in the GUI (a "Reactive / Music" tab, music rhythm from the audio level), and a way to stop it cleanly.
+2. **Real-time Lighting** (SOLVED 2026-11-22, see docs/PROTOCOL.md): frames need the fixed slot order, a `04 02` packet and a status read (wait for `01`) after the header and after `04 02`. `tools/keypress_glow.py` (pressed keys light up and fade) works, verified on hardware. `tools/music_rhythm.py` (equalizer on the keys from the PC audio via WASAPI loopback, `soundcard` + numpy; `--mode pulse` = whole-keyboard bass flash, not yet eyeballed) works, verified on hardware (bars mode). Still to do: put both in the GUI (a "Reactive / Music" tab), and a way to stop them cleanly.
 2b. From the app's English strings (`research/ak980_extract/en_strings.txt`): key response levels 1-5, Fn Momentary/Toggle,
    mouse-button key functions, 3 exclusive configs, lighting-scheme import/export, TFT frame editor + GIF export.
 3. Verify the remaining effect ids, "LED Off", direction byte, key response level 1, and the clock on the screen by eye.
