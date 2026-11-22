@@ -36,7 +36,10 @@ A desktop shortcut "AK980 Manager.lnk" was created on the user's desktop (target
   on the Keys tab and Apply; then tap Fn once, release, press Q → should type `w` until Fn is tapped again. Set it back to
   Momentary afterwards.
 * The old test remaps (A→Volume+, B→Left Shift, F/G macros, Fn Q→W) were **reset on 2026-11-22** (both layers) and verified by typing. If the official app is
-  started again it re-applies its saved profile and they come back: reset again (Keys page → Reset all keys). The keyboard's stored test macros are unused.
+  started again it re-applies its saved profile and they come back. The app keeps its 3 configs, key assignments and macros in
+  `%LOCALAPPDATA%\Device Driver Files\db\*_datav1.db` (SQLite); on 2026-11-22 the key/macro tables were cleared with `research/logs/clear_official_keys.py`
+  (backup next to the db). After any capture in the official app, close it, run that script, then reset the keyboard (empty keymaps + `set_macros([])`).
+  The official app has NO keyboard-side config slots: a config switch only rewrites the 04 11 / 04 27 key tables (capture `config1.log`).
 * **Releases**: v1.0.0 to v1.0.4 are published. Check that a v1.0.0 install really updates itself to v1.0.1. Ask before publishing further releases.
 * **Tray icon + single instance** (`tray.py`, ctypes only, released in 1.0.2): X hides to the tray (effects keep running), tray menu Show/Quit, `--startup` starts hidden, a second launch shows the running window (works across elevation). Tested by script only (icon registration ok, show/hide, second-instance); not eyeballed in the notification area, not tested elevated.
 * **Start with Windows** (`autostart.py`, System page > Startup): Task Scheduler task "AK980 Manager", logon trigger, highest privileges, `--startup` starts minimised. Create/remove tested on this PC (one UAC prompt each); a reboot/sign-in run not yet verified.
