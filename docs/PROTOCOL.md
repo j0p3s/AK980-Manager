@@ -132,7 +132,7 @@ Code: `Keyboard.realtime_frame`, `Keyboard.stream_realtime`.
 
 Key response levels 1-5 (the app's text: about 2-3 / 5-6 / 8-9 / 13-14 / 17-18 ms wired; only 2 and 3 were captured),
 three "exclusive configs" and saved
-lighting schemes with import/export, the TFT frame editor and GIF export.
+nothing of the official app's key, macro, profile, screen or lighting-scheme features (see HANDOFF).
 
 ## Not decoded / not covered
 

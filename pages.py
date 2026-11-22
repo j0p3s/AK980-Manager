@@ -6,6 +6,7 @@ import html
 import json
 import os
 import re
+import xml.etree.ElementTree as ET
 import tkinter as tk
 from tkinter import colorchooser, filedialog, messagebox, ttk
 
@@ -141,6 +142,41 @@ def hex_rgb(h):
 
 def rgb_hex(c):
     return '#%02x%02x%02x' % tuple(int(x) for x in c)
+
+
+def scheme_to_xml(name, colors):
+    """The official app's lighting scheme file: one item per key, key_code = the key's HID usage, key_rgb = R + G*256 + B*65536."""
+    lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<userlight>', '<lightinfo name="%s"/>' % html.escape(name, quote=True), '<keyinfo>']
+    for k in keys.KEYS:
+        r, g, b = hex_rgb(colors.get(k[3]) or '#000000')
+        lines.append('<item key_code="%d" key_rgb="%d"/>' % (k[2], r | g << 8 | b << 16))
+    lines += ['</keyinfo>', '</userlight>', '']
+    return '\n'.join(lines)
+
+
+def scheme_from_xml(text):
+    """(name, {light_index: '#rrggbb'}) from a scheme file. Raises ValueError if it is not one."""
+    if len(text) > 300000 or '<!DOCTYPE' in text.upper() or '<!ENTITY' in text.upper():
+        raise ValueError('This does not look like a lighting scheme file.')
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError as e:
+        raise ValueError('Cannot read the file: %s' % e)
+    if root.tag != 'userlight':
+        raise ValueError('This is not a lighting scheme (no <userlight>).')
+    by_usage = {k[2]: k[3] for k in keys.KEYS}
+    out = {}
+    for it in root.iter('item'):
+        try:
+            li, v = by_usage.get(int(it.get('key_code'))), int(it.get('key_rgb'))
+        except (TypeError, ValueError):
+            continue
+        if li is not None:
+            out[li] = rgb_hex((v & 255, (v >> 8) & 255, (v >> 16) & 255))
+    if not out:
+        raise ValueError('The file has no key colours.')
+    info = root.find('lightinfo')
+    return (info.get('name') if info is not None and info.get('name') else 'Imported'), out
 
 
 class Palette(tk.Frame):
@@ -287,7 +323,9 @@ class PerKeyPage(Page):
         Palette(row, self.setcur).pack(side='left')
         Btn(row, 'Fill all', self.fill, height=30, size=9).pack(side='left', padx=(20, 6))
         Btn(row, 'Rainbow', self.rainbow, height=30, size=9).pack(side='left', padx=(0, 6))
-        Btn(row, 'Clear all', self.clear, height=30, size=9).pack(side='left')
+        Btn(row, 'Clear all', self.clear, height=30, size=9).pack(side='left', padx=(0, 6))
+        Btn(row, 'Import scheme...', self.import_scheme, height=30, size=9).pack(side='right')
+        Btn(row, 'Export scheme...', self.export_scheme, height=30, size=9).pack(side='right', padx=6)
         card = Card(self)
         card.pack(fill='both', expand=True, pady=12)
         self.kv = KeyboardView(card.body, unit=44, on_press=self.paint, on_drag=self.paint)
@@ -322,6 +360,31 @@ class PerKeyPage(Page):
     def clear(self):
         self.colors = {}
         self._refresh()
+
+    def export_scheme(self):
+        f = filedialog.asksaveasfilename(defaultextension='.xml', filetypes=[('Lighting scheme', '*.xml')], initialfile='Custom Light 1.xml')
+        if not f:
+            return
+        try:
+            with open(f, 'w', encoding='utf-8') as fh:
+                fh.write(scheme_to_xml(os.path.splitext(os.path.basename(f))[0], self.colors))
+            self.app.status_msg('Lighting scheme exported', 'ok')
+        except OSError as e:
+            messagebox.showerror('Export scheme', str(e))
+
+    def import_scheme(self):
+        f = filedialog.askopenfilename(filetypes=[('Lighting scheme', '*.xml'), ('All files', '*.*')])
+        if not f:
+            return
+        try:
+            with open(f, encoding='utf-8') as fh:
+                name, cols = scheme_from_xml(fh.read())
+        except (OSError, ValueError, UnicodeDecodeError) as e:
+            messagebox.showerror('Import scheme', str(e))
+            return
+        self.colors = cols
+        self._refresh()
+        self.app.status_msg('Scheme "%s" loaded (%d keys). Press Apply to send it to the keyboard.' % (name, len(cols)), 'ok')
 
     def _refresh(self):
         self.kv.set_colors({li: c for li, c in self.colors.items() if c != '#000000'})
