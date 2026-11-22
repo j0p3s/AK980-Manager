@@ -62,3 +62,51 @@ def char(usage, shift=False, altgr=False):
     if n < 0 and buf.value:
         return buf.value[:1], True
     return None
+
+
+# ---------------------------------------------------------------------------------------------- typing text on this layout
+_ACCENTS = {'´': '́', '`': '̀', '~': '̃', '^': '̂', '¨': '̈'}      # dead accent -> combining mark
+_cache = {}
+SPACE = 0x2C
+
+
+def _build():
+    direct, dead = {}, {}
+    for u in SC:
+        for shift, altgr in ((False, False), (True, False), (False, True), (True, True)):
+            r = char(u, shift, altgr)
+            if not r:
+                continue
+            step = (u, shift, altgr)
+            if r[1]:
+                dead.setdefault(r[0], step)
+            else:
+                # prefer the plainest way to type a character (no modifiers, then Shift, then AltGr)
+                if r[0] not in direct or (shift + 2 * altgr) < (direct[r[0]][1] + 2 * direct[r[0]][2]):
+                    direct[r[0]] = step
+    import unicodedata
+    for acc, mark in _ACCENTS.items():                                    # accented letters = dead accent + base letter
+        if acc not in dead:
+            continue
+        for base in 'aeiouAEIOUcCnN':
+            comp = unicodedata.normalize('NFC', base + mark)
+            if len(comp) == 1 and comp not in direct:
+                direct[comp] = [dead[acc], direct[base]]
+    for acc, step in dead.items():                                        # a lone accent character = dead key + Space
+        direct.setdefault(acc, [step, (SPACE, False, False)])
+    direct[' '] = (SPACE, False, False)
+    direct['\n'] = (0x28, False, False)
+    direct['\t'] = (0x2B, False, False)
+    return direct
+
+
+def type_steps(ch):
+    """Key presses [(usage, shift, altgr), ...] that type ch on the active layout, or None if it cannot be typed."""
+    key = name() + '|' + str(_hkl())
+    if key not in _cache:
+        _cache.clear()
+        _cache[key] = _build()
+    s = _cache[key].get(ch)
+    if s is None:
+        return None
+    return s if isinstance(s, list) else [s]

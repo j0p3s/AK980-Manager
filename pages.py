@@ -29,9 +29,6 @@ MEDIA = {'Volume Up': 0xE9, 'Volume Down': 0xEA, 'Mute': 0xE2, 'Play/Pause': 0xC
 MOUSE = {'Left Click': (1, 0x01), 'Right Click': (1, 0x02), 'Middle Click': (1, 0x04), 'Double Click': (1, 0x03),
          'Mouse Button 4 (Back)': (1, 0x08), 'Mouse Button 5 (Forward)': (1, 0x10), 'Scroll Up': (3, 0x01), 'Scroll Down': (3, 0xFF)}
 MODS = ['LCtrl', 'LShift', 'LAlt', 'LWin', 'RCtrl', 'RShift', 'RAlt', 'RWin']
-CHAR_USAGE = {c: 4 + i for i, c in enumerate('abcdefghijklmnopqrstuvwxyz')}
-CHAR_USAGE.update({c: 30 + i for i, c in enumerate('123456789')})
-CHAR_USAGE.update({'0': 39, ' ': 0x2C, '\n': 0x28, '\t': 0x2B})
 PRETTY = {'Shift_L': 'Left Shift', 'Shift_R': 'Right Shift', 'Ctrl_L': 'Left Ctrl', 'Ctrl_R': 'Right Ctrl', 'Win_L': 'Left Win',
           'Alt_L': 'Left Alt', 'del': 'Delete', 'home': 'Home', 'page up': 'Page Up', 'page down': 'Page Down', 'CapsLock': 'Caps Lock',
           'Backspace': 'Backspace', 'Num': 'Num Lock', '//': '/'}
@@ -69,13 +66,30 @@ def save_json(path, obj):
         pass
 
 
+SHIFT_USAGE, ALTGR_USAGE = 0xE1, 0xE6          # Left Shift, Right Alt (= AltGr on layouts that have it)
+
+
 def macro_events(text, delay):
+    """Key events (usage, is_down, delay_ms) that type text on the active Windows layout: capitals and symbols use Shift / AltGr,
+    accented letters use the dead accent key, so the result matches what the user's layout would type."""
     ev = []
-    for ch in text.lower():
-        u = CHAR_USAGE.get(ch)
-        if u:
+    for ch in text:
+        steps = layout.type_steps(ch)
+        if not steps:
+            continue
+        for u, shift, altgr in steps:
+            mods = ([SHIFT_USAGE] if shift else []) + ([ALTGR_USAGE] if altgr else [])
+            for m in mods:
+                ev.append((m, True, delay))
             ev += [(u, True, delay), (u, False, delay)]
+            for m in reversed(mods):
+                ev.append((m, False, delay))
     return ev
+
+
+def macro_unsupported(text):
+    """Characters of text that cannot be typed with the keys of the active layout."""
+    return sorted({ch for ch in text if not layout.type_steps(ch)})
 
 
 def hex_rgb(h):
@@ -764,7 +778,7 @@ class KeysPage(Page):
 
 # ------------------------------------------------------------------------------------------------ macros
 class MacrosPage(Page):
-    title, subtitle = 'Macros', 'Text macros you can put on any key (Keys page). Letters a-z, digits and space.'
+    title, subtitle = 'Macros', 'Text macros you can put on any key (Keys page). Typed the way your Windows layout types them: capitals, symbols, accents.'
 
     def __init__(self, parent, app):
         super().__init__(parent, app)
@@ -796,8 +810,11 @@ class MacrosPage(Page):
     def add(self):
         n, t = self.name.get().strip(), self.text.get()
         if not n or not macro_events(t, 10):
-            messagebox.showerror('Macro', 'Give a name and some text (a-z, 0-9, space).')
+            messagebox.showerror('Macro', 'Give a name and some text to type.')
             return
+        bad = macro_unsupported(t)
+        if bad:
+            messagebox.showwarning('Macro', 'These characters cannot be typed on your keyboard layout and will be skipped: %s' % ' '.join(bad))
         m = {'name': n, 'text': t, 'delay': max(10, int(self.delay.get()))}
         for i, x in enumerate(self.app.macros):
             if x['name'] == n:

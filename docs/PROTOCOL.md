@@ -61,8 +61,10 @@ All multi-packet tables end with the two bytes `AA 55`.
 * Each macro: 8-byte header `[2*events, 0 ×7]` followed by one 8-byte record per event:
   `[0, 0, hid_usage, flag, delay_lo, delay_hi, 0, 0x50]`, flag `0xB0` = key down, `0x30` = key up, delay = ms before the
   event (the app shows 0 for the last event but stores 10, so the minimum is 10). Total length = `(end//64 + 2) * 64`, `AA 55` last.
-* A key runs macro *n* through keymap entry `[06, n]`. Repeat count (shown in the app) is **not** in these packets;
-  mouse events and modifier events (capital letters) were **not captured**.
+* Modifier events (captured 2026-11-22, verified on hardware) are normal records with the modifier usage `E0`-`E7` (LShift `E1`, LCtrl `E0`,
+  LAlt `E2`, RAlt `E6`): down, key down, key up, up. The app records AltGr as LCtrl+LAlt; we send RAlt, which also works.
+* A key runs macro *n* through keymap entry `[06, n]`. A repeat count is **not** in these packets (the entry stayed `06 02 00 00`;
+  unconfirmed whether the user had set one). Mouse events in macros are **not captured** (the click was not recorded by the app).
 
 ### System settings — header `04 17 01 00 00 00 00 00 01`, then one packet
 
