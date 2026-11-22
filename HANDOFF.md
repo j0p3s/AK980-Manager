@@ -1,6 +1,6 @@
 # Handoff — AK980 Manager
 
-Last updated: 2026-11-22 (third long session: key functions, macros, profiles, screen editor, lighting schemes, 2.4G dongle, Fn investigation).
+Last updated: 2026-11-22 (third long session: key functions, macros, profiles, screen editor, lighting schemes, 2.4G dongle, Fn layer solved, dongle-only test).
 Repository: https://github.com/j0p3s/AK980-Manager · License: GPL-3.0-or-later · latest release **v1.0.5**.
 
 ## What this is
@@ -23,8 +23,8 @@ The user is Portuguese (**Portuguese Windows layout**, ANSI keyboard, no Print S
 | Reactive: key glow, Music Rhythm | glow verified; equalizer verified by eye from CLI; GUI audio path only checked for "no error"; bass pulse never eyeballed |
 | System: sleep, key response, clock | sent byte-identical to the app, effect not observable by eye |
 | Start with Windows (admin task), tray icon, single instance, centred window | verified by the user (sign-in start, tray, PC actions as admin); self-update of the exe verified on real releases |
-| **2.4G dongle** (`ak980.DongleKeyboard`, `connect()`) | lighting + Top-layer keys verified. Everything else not implemented (see below) |
-| **Fn layer / Fn Momentary-Toggle** | **NOT working / never verified, see "Where the last session stopped"** |
+| **2.4G dongle** (`ak980.DongleKeyboard`, `connect()`) | lighting + Top-layer keys **verified with the cable unplugged** (dongle alone, 2026-11-22). Everything else, Fn layer included, not implemented (see below) |
+| **Fn layer / Fn Momentary-Toggle** (cable) | **verified** with our own code (Fn+A->B, Fn+J->K; Momentary and Toggle). Fn+Q and Fn+1 do NOT work, even when the official app writes them (firmware-reserved) |
 
 ## How to run
 Double-click `Start AK980 Manager.bat` (installs Python via winget if missing; the program then installs its own packages and updates itself from GitHub, see `bootstrap.py`;
@@ -34,11 +34,11 @@ skipped in a git checkout). By hand: `pip install -r requirements.txt` then `pyt
 
 ## Where the last session stopped (read this first)
 * **Unpushed commits**: `9d344de` (lighting scheme import/export) and `af95840` (2.4G dongle) + this HANDOFF. v1.0.5 is the latest release. Ask before pushing/releasing 1.0.6.
-* **Fn layer investigation (open, highest priority)**: writing the Fn layer (`set_keymap(..., 'fn')`, wired `04 27`) with **Fn+Q -> W** did nothing when the user held Fn and pressed Q,
-  on the cable and also through the dongle (single-key cmd `0d`, which the dongle acknowledges `0d 04 26 00`). The Fn layer has never been verified on hardware.
-  The pending test was **Toggle mode**: `set_system(2, 2, fn_toggle=True)`, tap Fn once, press Q -> should type `w`. The user did not answer before the keyboard was reset.
-  Ideas: Fn layer works only in Toggle; wrong key index in the Fn table; the Fn key needs a "Fn switch function" entry; capture the official app doing an Fn
-  assignment and the Momentary/Toggle buttons over the **cable** with Frida and compare. Then verify Momentary/Toggle (the user's next item).
+* **Fn layer: SOLVED (cable)**. Our `04 27` table format is identical to the official app's (checked with Frida, `research/logs/fnassign.log`). The earlier failures were the test keys:
+  **Fn+Q and Fn+1 are reserved by the firmware** (also fail when the official app writes them); Fn+A and Fn+J work. **Toggle** failed only because of timing: the keyboard silently ignores a
+  system packet (`04 17`) sent right after a key-table write. `set_system` now calls `wait_ready()` + sleeps 0.6 s first (verified: sleep byte 1 and 2 both work then; fn_toggle byte 5 = 1 is Toggle,
+  confirmed by capture `fnmode.log`). Fix is in `ak980.py`, untested through the GUI's System page. The app also writes an empty Top table before the Fn table (not needed).
+* Dongle test done 2026-11-22 with the cable unplugged (`research/logs/_dongle_only_test.py`): lighting solid R/G/B and Q->W both worked. Fn test scripts: `_fn_aj_test.py`, `_fn_toggle_aj4.py`.
 * The keyboard was reset to defaults at the end of the session (both layers empty, macros cleared, Fn Momentary, sleep 5 min, lighting Glittering `(77,107,255)` colourful, brightness 3, speed 3).
 * The official app's db was cleared again (key/macro tables); the keyboard is currently in **wired mode** with the dongle also plugged in.
 
@@ -47,7 +47,7 @@ Commands are 33-byte output reports on the dongle's `MI_03` (usage page FF60), b
 `0d 04 ...` (Fn), both **acknowledged**; lighting `05 10 00 <16-byte wired block>` (no ack); system `07 10 00 <wired system block cut to 14 bytes + AA 55>`; bulk tables in 28-byte chunks
 `[cmd, len, seq] + data`, footer chunk shorter (cmd `10` Top keymap, `12` Fn keymap, `14` per-key colours, `09` macros; key-table footers carry 4 extra bytes `00 cmd len seq`).
 Bulk chunks get **no replies** and the wireless link sleeps when idle: the first packets after a pause can be lost (single-key commands are retried until acked). Our bulk table write
-of the Fn table could not be confirmed (Fn itself is unverified). Not captured: clock, real-time lighting stream, screen upload (`MI_04`, page FF59, 65-byte reports is the candidate),
+of the Fn table has not been tested; the Fn layer works on the cable, so capture the official app's Fn assignment over the dongle (cmd `12` chunks / `0d` single key) and test it. Not captured: clock, real-time lighting stream, screen upload (`MI_04`, page FF59, 65-byte reports is the candidate),
 macro table length rule (official: 468 bytes for one 2-key macro). Bluetooth: the official app does not support settings there, nothing to do.
 
 ## Things that bite (read before touching the keyboard)
@@ -77,7 +77,7 @@ the user to make **specific assignments** in its UI and Apply once, then decode 
 Its English strings: `research/ak980_extract/en_strings.txt`. Always rebuild the captured bytes offline, then verify on hardware (the user presses keys and reports).
 
 ## Open work / ideas
-1. **Fn layer + Fn Momentary/Toggle** (see above) — then Fn-layer support over the dongle.
+1. **Fn-layer support over the dongle** (Fn layer + Momentary/Toggle are verified on the cable). Also check the GUI's System page applies Toggle correctly after the `set_system` timing fix.
 2. **2.4G leftovers**: macros, per-key colours, system settings, clock, real-time lighting (key glow / Music Rhythm), screen upload over the dongle.
 3. Real-time Lighting scheme export (only the per-key scheme was captured), more Music Rhythm modes of the official app.
 4. Still unverified on hardware: effect ids 2-7, 10, 12+, "LED Off", direction byte, key response level 1, the screen clock, My Computer/Copy/Paste/Cut shortcuts, Music Rhythm in the GUI with music, bass pulse.

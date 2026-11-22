@@ -259,6 +259,10 @@ class Keyboard:
         body[6] = sleep
         body[8] = level
         body[62:64] = bytes([0xAA, 0x55])
+        # Verified on hardware: a system packet sent right after a key-table write is silently ignored (the Fn Toggle bit never took
+        # effect), so wait until the keyboard is ready and give it a moment, as the official app does (~0.6 s after a table).
+        self.wait_ready()
+        time.sleep(0.6)
         self.transaction(bytes([0x04, 0x18]), bytes([0x04, 0x17, 1, 0, 0, 0, 0, 0, 1]), bytes(body))
 
     # --- per-key ("User Lighting") ---------------------------------------------------------
