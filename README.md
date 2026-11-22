@@ -16,7 +16,7 @@ Windows, Python 3.10+ (Tkinter), Pillow. Licensed under the **GNU GPL v3 or late
 | **Macros** | text-typing macros (letters, digits, space) with a delay; assigned on the Keys tab |
 | **Per-key** | paint every key with its own colour (user lighting) |
 | **Screen** | upload PNG/JPG/GIF frames (240×135, up to 140) to the TFT screen; sync the clock |
-| **System** | sleep time and key response level |
+| **System** | sleep time, key response level, Fn key Momentary / Toggle |
 
 ## Install and run
 
@@ -41,7 +41,8 @@ Use as a library: `import ak980; kb = ak980.Keyboard(); kb.set_lighting('Spectru
 * **Real-time Lighting and Music Rhythm are not supported.** The stream format is known (`04 20`, per-key colours at ~20 fps,
   see docs/PROTOCOL.md) but on the tested keyboard even the official app's Real-time page only produced black frames, and
   streaming frames from here did not light the keyboard.
-* Not implemented: the Fn Momentary/Toggle switch, mouse-button key functions, multiple profiles, the screen frame editor,
+* The Fn Momentary/Toggle switch is implemented from a capture but was not yet checked by pressing Fn on the keyboard.
+* Not implemented: mouse-button key functions, multiple profiles, the screen frame editor,
   firmware update, Reset / Factory Reset (deliberately).
 * Writes take time: a per-key / macro / keymap update needs a few seconds; a screen upload with many frames can take minutes.
 

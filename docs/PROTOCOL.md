@@ -65,7 +65,9 @@ All multi-packet tables end with the two bytes `AA 55`.
 ### System settings — header `04 17 01 00 00 00 00 00 01`, then one packet
 
 ```
-[00, 01, 0, 0, 0, 0, sleep, 0, level, 0 …, AA, 55]      (positions 62-63)
+[00, 01, 0, 0, 0, fn_switch, sleep, 0, level, 0 …, AA, 55]      (AA 55 at positions 62-63)
+fn_switch: 0 = Momentary (hold Fn, default), 1 = Toggle (press Fn to switch layer) — captured from the app's switch, not yet
+           checked on the keyboard by pressing Fn
 sleep: 0 = No Sleep, 1 = 1 min, 2 = 5 min, 3 = 30 min          level: key response 2 and 3 verified (1 unverified)
 ```
 
@@ -100,7 +102,7 @@ the same stream.
 ## Other features seen in the official app's strings but not implemented
 
 Key response levels 1-5 (the app's text: about 2-3 / 5-6 / 8-9 / 13-14 / 17-18 ms wired; only 2 and 3 were captured),
-the Fn *Momentary / Toggle* switch, mouse-button key functions (Mouse Button 1-5), three "exclusive configs" and saved
+mouse-button key functions (Mouse Button 1-5), three "exclusive configs" and saved
 lighting schemes with import/export, the TFT frame editor and GIF export.
 
 ## Not decoded / not covered

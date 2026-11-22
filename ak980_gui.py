@@ -365,19 +365,24 @@ class SystemTab(ttk.Frame):
         self.level = ttk.Combobox(f, values=['2', '3'], state='readonly', width=12)
         self.level.set('2')
         self.level.grid(row=1, column=1, padx=10)
+        ttk.Label(f, text='Fn key').grid(row=2, column=0, sticky='w', pady=6)
+        self.fn = ttk.Combobox(f, values=['Momentary (hold Fn)', 'Toggle (press Fn to switch layer)'], state='readonly', width=30)
+        self.fn.set('Momentary (hold Fn)')
+        self.fn.grid(row=2, column=1, padx=10)
         ttk.Label(f, text='Higher level = more delay (less key chatter). Level 2 is the keyboard default.',
-                  wraplength=360, foreground='#555').grid(row=2, column=0, columnspan=2, pady=8, sticky='w')
-        ttk.Button(f, text='Apply to keyboard', command=self.apply).grid(row=3, column=0, columnspan=2, sticky='w')
+                  wraplength=360, foreground='#555').grid(row=3, column=0, columnspan=2, pady=8, sticky='w')
+        ttk.Button(f, text='Apply to keyboard', command=self.apply).grid(row=4, column=0, columnspan=2, sticky='w')
 
     def apply(self):
         if not self.app.kb:
             messagebox.showerror('Keyboard', 'Keyboard not connected')
             return
         sl, lv = ak980.Keyboard.SLEEP[self.sleep.get()], int(self.level.get())
+        tg = self.fn.get().startswith('Toggle')
 
         def job():
             try:
-                self.app.kb.set_system(sl, lv)
+                self.app.kb.set_system(sl, lv, tg)
                 self.app.after(0, self.app.status.set, 'System settings applied')
             except OSError as e:
                 self.app.after(0, self.app.status.set, 'Error: %s' % e)

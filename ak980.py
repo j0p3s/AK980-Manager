@@ -212,13 +212,15 @@ class Keyboard:
                 k32.CloseHandle(h)
 
     # --- system settings ---------------------------------------------------------------------
-    # `04 18`, `04 17 01 00*5 01`, then [00 01 0 0 0 0 sleep 00 level 00.. aa 55]
+    # `04 18`, `04 17 01 00*5 01`, then [00 01 0 0 0 fn_toggle sleep 00 level 00.. aa 55]
     # sleep: 0 = No Sleep, 1 = 1 min, 2 = 5 min, 3 = 30 min; level = key response level (2 and 3 verified).
     SLEEP = {'No Sleep': 0, '1 min': 1, '5 min': 2, '30 min': 3}
 
-    def set_system(self, sleep=2, level=2):
+    def set_system(self, sleep=2, level=2, fn_toggle=False):
+        """fn_toggle: False = Fn is Momentary (hold), True = Toggle (press to switch layer)."""
         body = bytearray(64)
         body[1] = 1
+        body[5] = 1 if fn_toggle else 0
         body[6] = sleep
         body[8] = level
         body[62:64] = bytes([0xAA, 0x55])

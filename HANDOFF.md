@@ -1,6 +1,6 @@
 # Handoff — AK980 Manager
 
-Last updated: 2026-11-22. Repository: https://github.com/j0p3s/AK980-Manager · License: GPL-3.0-or-later.
+Last updated: 2026-11-22 (end of the first long session). Repository: https://github.com/j0p3s/AK980-Manager · License: GPL-3.0-or-later.
 
 ## What this is
 English control software for the user's **AJAZZ AK980 V2 PRO** keyboard (Sonix `0C45:8009`), because the official app is Chinese-only.
@@ -17,11 +17,24 @@ The protocol was reverse engineered from the official app; the full description 
 | TFT screen upload (240×135 RGB565, ≤140 frames) | works (own image and a user image shown); must be paced ~140 ms per 4 KB chunk |
 | System: sleep time, key response level | sent byte-identical to the app's packets; **effect not observable** by eye, so only matched to captures |
 | Clock sync | sent like the app does; screen clock not checked visually |
+| Fn key Momentary/Toggle (System tab, `set_system(..., fn_toggle)`) | byte 5 of the `04 17` packet decoded from the official app (0 = Momentary, 1 = Toggle); **not yet verified on hardware** |
 | GUI tabs: Lighting, Keys, Macros, Per-key, Screen, System | start and connect; the Macros, System and Per-key tabs were smoke-tested but not clicked through at length |
 
 ## How to run
 `pip install -r requirements.txt` then `python ak980_gui.py` (or double-click `AK980 Manager.pyw`). **Close the official app first.**
 A desktop shortcut "AK980 Manager.lnk" was created on the user's desktop (target: `pythonw.exe` of Python 3.15 + the .pyw).
+
+## Pending / where the last session stopped
+* **Verify the Fn switch on hardware:** close the official app, in the System tab choose "Toggle", Apply; remap Fn-layer Q→W
+  on the Keys tab and Apply; then tap Fn once, release, press Q → should type `w` until Fn is tapped again. Set it back to
+  Momentary afterwards.
+* The session ended while the **official app was still running with its Frida logger stopped**. The official app re-applies its
+  saved profile, so the keyboard may currently have the old test remaps (A→Volume+, B→Left Shift, F/G macros, Fn Q→W) and the
+  Fn switch may be on Toggle. Close the official app and use the Keys tab "Reset all keys to default" (and System tab →
+  Momentary) to clean up.
+* Real-time Lighting was investigated and is unresolved (see Open work 2 and docs/PROTOCOL.md). It turned the keyboard dark in the
+  official app on this unit; selecting any normal effect (Lighting tab) restores it.
+* Key response levels 1-5 exist in the official app; the System tab only offers the verified 2 and 3.
 
 ## Things that bite (read before touching the keyboard)
 * The official app (`DeviceDriver.exe`) polls ~12 Hz and **breaks any other writer**; it also **re-applies its saved profile at start-up**.
@@ -57,6 +70,7 @@ unpacked vendor installer. It is in `.gitignore` on purpose; do not publish it.
 7-Zip, innoextract, USBPcap (driver + needs reboot to capture), Wireshark, and `pip install frida frida-tools`.
 
 ## Open work / ideas
+0. Mouse-button key functions (Mouse Button 1-5 in the official key menu) — not captured yet.
 1. Macros: mouse events, repeat count, modifier events (capital letters, symbols) — capture the app recording Shift+A and a click.
 2. **Real-time Lighting / Music Rhythm** (investigated, unresolved): the app streams `04 20` frames (512 bytes of
    [light_index,R,G,B], ~20 fps) but on this unit all frames were black, the keyboard went dark and key presses did nothing; frames
