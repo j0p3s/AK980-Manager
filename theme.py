@@ -117,6 +117,9 @@ class Btn(tk.Canvas):
 
     def set_text(self, text):
         self.text = text
+        f = tkfont.Font(family=FONT, size=self.size, weight='bold' if self.kind == 'primary' else 'normal')
+        self.w = f.measure(text) + 34
+        self.configure(width=self.w)
         self._draw()
 
 

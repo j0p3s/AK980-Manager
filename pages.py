@@ -744,6 +744,15 @@ class SystemPage(Page):
         label(g, 'Higher response level = more delay (less key chatter). Level 2 is the keyboard default.', 9, False, C['muted'],
               C['card']).grid(row=3, column=0, columnspan=2, sticky='w', pady=(4, 10))
         Btn(g, 'Apply to keyboard', self.apply, 'primary', height=36).grid(row=4, column=0, columnspan=2, sticky='w')
+        st = Card(self, 'Startup')
+        st.pack(fill='x', pady=(14, 0))
+        label(st.body, 'Start with Windows, as administrator (Task Scheduler). Lets you turn off the official app\'s autostart: '
+              'this program starts at sign-in, minimised, with no UAC prompt each time.', 9, False, C['muted'], C['card'],
+              justify='left', wraplength=720).pack(anchor='w', pady=(0, 10))
+        self.auto_btn = Btn(st.body, '', self.toggle_autostart, height=34)
+        self.auto_btn.pack(anchor='w')
+        self.auto_msg = label(st.body, '', 10, False, C['muted'], C['card'])
+        self.auto_msg.pack(anchor='w', pady=(8, 0))
         soft = Card(self, 'Software')
         soft.pack(fill='x', pady=14)
         self.ver = label(soft.body, '', 10, False, C['muted'], C['card'])
@@ -765,6 +774,30 @@ class SystemPage(Page):
             sha = bootstrap._state().get('sha')
             txt = 'Version %s - %s' % (VERSION, sha[:7] if sha else ('developer checkout' if bootstrap.is_dev_checkout() else 'unknown build'))
         self.ver.configure(text=txt)
+        self._auto_refresh()
+
+    def _auto_refresh(self, msg=None):
+        import autostart
+        on = autostart.exists()
+        self.auto_btn.set_text('Turn off start with Windows' if on else 'Start with Windows (as administrator)')
+        if msg:
+            self.auto_msg.configure(text=msg[0], fg=msg[1])
+        elif on:
+            self.auto_msg.configure(text='On: starts at sign-in with administrator rights.', fg=C['ok'])
+        else:
+            self.auto_msg.configure(text='Off.', fg=C['muted'])
+
+    def toggle_autostart(self):
+        import threading
+        import autostart
+        turn_on = not autostart.exists()
+        self.auto_btn.set_enabled(False)
+        self.auto_msg.configure(text='Waiting for the Windows administrator prompt...', fg=C['muted'])
+
+        def job():
+            ok, text = autostart.enable() if turn_on else autostart.disable()
+            self.app.post(lambda: (self._auto_refresh((text, C['ok'] if ok else C['warn'])), self.auto_btn.set_enabled(True)))
+        threading.Thread(target=job, daemon=True).start()
 
     def apply(self):
         if not self.app.require_kb():

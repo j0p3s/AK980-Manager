@@ -73,8 +73,7 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title('AK980 Manager')
-        self.geometry('1240x820')
-        self.minsize(1100, 740)
+        self._place(1240, 820, 1100, 740)
         theme.setup(self)
         try:
             self.iconbitmap(default=_resource('assets/icon.ico'))
@@ -94,6 +93,30 @@ class App(tk.Tk):
         self.after(25, self._drain)
         self.after(200, self._tick_connect)
         self.after(500, self._tick_official)
+
+    def _work_area(self):
+        """(left, top, width, height) of the primary screen without the taskbar, in the same pixel units Tk uses (so it holds at
+        any DPI scaling, whether or not Windows virtualises the process)."""
+        try:
+            import ctypes
+            from ctypes import wintypes
+            r = wintypes.RECT()
+            if ctypes.windll.user32.SystemParametersInfoW(0x30, 0, ctypes.byref(r), 0):          # SPI_GETWORKAREA
+                w, h = r.right - r.left, r.bottom - r.top
+                # sanity: must agree with Tk's own idea of the screen, otherwise fall back
+                if 0 < w <= self.winfo_screenwidth() + 2 and 0 < h <= self.winfo_screenheight() + 2:
+                    return r.left, r.top, w, h
+        except Exception:
+            pass
+        return 0, 0, self.winfo_screenwidth(), self.winfo_screenheight()
+
+    def _place(self, w, h, minw, minh):
+        """Size the window (never larger than the usable screen) and centre it."""
+        self.update_idletasks()
+        x0, y0, sw, sh = self._work_area()
+        w, h = min(w, sw - 20), min(h, sh - 20)
+        self.minsize(min(minw, w), min(minh, h))
+        self.geometry('%dx%d+%d+%d' % (w, h, x0 + (sw - w) // 2, y0 + (sh - h) // 2))
 
     # ------------------------------------------------------------------ layout
     def _build(self):
@@ -311,7 +334,10 @@ def main():
     if r == 'updated':                             # new program files were downloaded: start again so they are the ones running
         subprocess.Popen([sys.executable] + sys.argv)
         sys.exit(0)
-    App().mainloop()
+    app = App()
+    if '--startup' in sys.argv:                    # started by the Windows-startup task: begin minimised
+        app.iconify()
+    app.mainloop()
 
 
 if __name__ == '__main__':

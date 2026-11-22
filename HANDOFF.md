@@ -23,7 +23,7 @@ The protocol was reverse engineered from the official app; the full description 
 | Music Rhythm (equalizer / bass pulse from PC audio) | equalizer verified by eye from the CLI tool; in the GUI the audio-thread COM bug was fixed but only checked for "no error"; bass pulse not eyeballed |
 | GUI (rebuilt 2026-11-22: sidebar, on-screen keyboard, Reactive tab) | every page builds, no clipped widgets, reactive modes start/stop, key assign / per-key paint work; **the user has not reviewed the look yet** |
 | Auto-setup + auto-update (`bootstrap.py`, `Start AK980 Manager.bat`) | tested in a clean venv and on a copy without `.git`; the winget "install Python" path is untested |
-| Packaged `AK980 Manager.exe` (`tools/build_exe.py`) | builds, runs, `--selftest` ok; exe auto-update tested only against a simulated release; **no GitHub Release published** (user said "not yet") |
+| Packaged `AK980 Manager.exe` (`tools/build_exe.py`) | builds, runs, `--selftest` ok; exe auto-update tested only against a simulated release; **v1.0.0 published 2026-11-22, v1.0.1 adds start-with-Windows**; auto-update still untested against a real release (v1.0.0 -> v1.0.1 is the first real test) |
 
 ## How to run
 Double-click `Start AK980 Manager.bat` (installs Python via winget if missing; the program then installs its own packages and updates itself from GitHub
@@ -37,7 +37,8 @@ A desktop shortcut "AK980 Manager.lnk" was created on the user's desktop (target
   Momentary afterwards.
 * The old test remaps (A→Volume+, B→Left Shift, F/G macros, Fn Q→W) were **reset on 2026-11-22** (both layers) and verified by typing. If the official app is
   started again it re-applies its saved profile and they come back: reset again (Keys page → Reset all keys). The keyboard's stored test macros are unused.
-* **Release decision pending**: the user wants to publish the .exe later (see Open work 7). Ask before running `gh release create`.
+* **Releases**: v1.0.0 and v1.0.1 are published. Check that a v1.0.0 install really updates itself to v1.0.1. Ask before publishing further releases.
+* **Start with Windows** (`autostart.py`, System page > Startup): Task Scheduler task "AK980 Manager", logon trigger, highest privileges, `--startup` starts minimised. Create/remove tested on this PC (one UAC prompt each); a reboot/sign-in run not yet verified.
 * **Wait for the user's feedback on the new GUI look** before polishing further.
 * Real-time Lighting is solved and works from our code (see Open work 2 and docs/PROTOCOL.md). The official app's own Real-time
   page only sent black frames on this unit and turned the lights off; selecting any normal effect (Lighting tab) restores it.
@@ -95,9 +96,9 @@ unpacked vendor installer. It is in `.gitignore` on purpose; do not publish it.
 6. **New GUI (2026-11-22) was checked by code only**: every page builds, no clipped widgets (geometry walk), reactive modes start/stop on the real keyboard,
    key assign/restore and per-key paint work. Nobody has looked at it yet (screenshots could not be viewed in that session) - ask the user for visual
    feedback (spacing, colours, the on-screen keyboard shapes in `keyboard_view.py`, which approximate the real key sizes).
-7. **Single .exe** (asked by the user; BUILT 2026-11-22, not yet released): `python tools/build_exe.py` -> `dist/AK980 Manager/AK980 Manager.exe` + `lib/`
+7. **Single .exe** (asked by the user; BUILT and released 2026-11-22): `python tools/build_exe.py` -> `dist/AK980 Manager/AK980 Manager.exe` + `lib/`
    (PyInstaller 6.22, `--contents-directory lib`, ~11 MB exe, 44 MB zip) and `dist/AK980-Manager-windows.zip(.sha256)`. No driver is bundled: the keyboard uses
    Windows' built-in HID class driver. `AK980 Manager.exe --selftest` writes `%APPDATA%\AK980Manager\selftest.txt` (keyboard / Pillow / audio / glow) - all ok on
    the user's PC. Frozen mode in `bootstrap.py`: no pip; updates come from the latest GitHub Release (zip asset ending `-windows.zip`, optional `.sha256` is
-   enforced, helper `apply.bat` swaps the folder after exit and restarts); tested only against a simulated release. **Publishing is the user's call**: bump
+   enforced, helper `apply.bat` swaps the folder after exit and restarts); tested only against a simulated release. Publishing: bump
    `version.py`, run the build, then `gh release create vX.Y.Z dist/AK980-Manager-windows.zip dist/AK980-Manager-windows.zip.sha256` (gh is logged in as j0p3s).
