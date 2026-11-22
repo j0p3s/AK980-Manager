@@ -14,7 +14,7 @@ The protocol was reverse engineered from the official app; the full description 
 | Keymap Top layer + Fn layer, media keys, modifiers, reset | works (Caps→Z, A→Volume+, B→Left Shift, Fn Q→W captured; Caps→Z and reset verified by typing) |
 | Macros (text typing) assigned to a key | works, verified on hardware with the Portuguese layout: capitals, symbols, AltGr, dead-accent letters (`layout.py`); mouse clicks via text tokens `{click}` `{rightclick}` `{middleclick}` `{wait 500}` (verified); play modes + loop count live in the key entry `[06, slot, mode, count]` (verified); macro tables are padded to >= 10 packets (needed for mouse events) |
 | Per-key RGB | works (verified by eye); needs "write table, wait until idle, then mode 0x80" |
-| TFT screen upload (240×135 RGB565, ≤140 frames) | works (own image and a user image shown); must be paced ~140 ms per 4 KB chunk |
+| TFT screen: frame editor (`screen_page.py`: brush/eraser/text/fill, per-frame delays, reorder, GIF export, load original animation); upload (240×135 RGB565, ≤140 frames) | works (own image and a user image shown); must be paced ~140 ms per 4 KB chunk |
 | System: sleep time, key response level | sent byte-identical to the app's packets; **effect not observable** by eye, so only matched to captures |
 | Clock sync | sent like the app does; screen clock not checked visually |
 | Fn key Momentary/Toggle (System tab, `set_system(..., fn_toggle)`) | byte 5 of the `04 17` packet decoded from the official app (0 = Momentary, 1 = Toggle); **not yet verified on hardware** |
@@ -40,7 +40,7 @@ A desktop shortcut "AK980 Manager.lnk" was created on the user's desktop (target
   `%LOCALAPPDATA%\Device Driver Files\db\*_datav1.db` (SQLite); on 2026-11-22 the key/macro tables were cleared with `research/logs/clear_official_keys.py`
   (backup next to the db). After any capture in the official app, close it, run that script, then reset the keyboard (empty keymaps + `set_macros([])`).
   The official app has NO keyboard-side config slots: a config switch only rewrites the 04 11 / 04 27 key tables (capture `config1.log`).
-* **Releases**: v1.0.0 to v1.0.4 are published. Check that a v1.0.0 install really updates itself to v1.0.1. Ask before publishing further releases.
+* **Releases**: v1.0.0 to v1.0.5 are published. Check that a v1.0.0 install really updates itself to v1.0.1. Ask before publishing further releases.
 * **Tray icon + single instance** (`tray.py`, ctypes only, released in 1.0.2): X hides to the tray (effects keep running), tray menu Show/Quit, `--startup` starts hidden, a second launch shows the running window (works across elevation). Tested by script only (icon registration ok, show/hide, second-instance); not eyeballed in the notification area, not tested elevated.
 * **Start with Windows** (`autostart.py`, System page > Startup): Task Scheduler task "AK980 Manager", logon trigger, highest privileges, `--startup` starts minimised. Create/remove tested on this PC (one UAC prompt each); a reboot/sign-in run not yet verified.
 * **Wait for the user's feedback on the new GUI look** before polishing further.

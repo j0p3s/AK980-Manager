@@ -18,12 +18,13 @@ import ak980
 import pages
 import pcactions
 import profiles
+import screen_page
 import theme
 import tray
 from theme import C, Btn, label
 
 NAV = [('Lighting', '☀', pages.LightingPage), ('Per-key', '▦', pages.PerKeyPage), ('Reactive', '♫', pages.ReactivePage),
-       ('Keys', '⌨', pages.KeysPage), ('Macros', '≣', pages.MacrosPage), ('Screen', '▭', pages.ScreenPage),
+       ('Keys', '⌨', pages.KeysPage), ('Macros', '≣', pages.MacrosPage), ('Screen', '▭', screen_page.ScreenPage),
        ('Profiles', '◧', profiles.ProfilesPage), ('System', '⚙', pages.SystemPage)]
 NO_WINDOW = 0x08000000
 

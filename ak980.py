@@ -342,7 +342,7 @@ class Keyboard:
                 raise OSError('cannot open screen interface (error %d)' % ctypes.get_last_error())
             try:
                 self._xfer(h3, bytes([0x04, 0x18]))
-                self._xfer(h3, bytes([0x04, 0x72, 0x02, 0, 0, 0, 0, 0, chunks, 0]))
+                self._xfer(h3, bytes([0x04, 0x72, 0x02, 0, 0, 0, 0, 0, chunks & 0xFF, chunks >> 8]))
                 for i in range(chunks):
                     buf = b'\x00' + data[i * 4096:(i + 1) * 4096]
                     written = w.DWORD()

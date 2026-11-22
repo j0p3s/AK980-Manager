@@ -101,7 +101,8 @@ Sent by the official app whenever it changes page; replayed by this software wit
    the handle. Sending faster stalls the keyboard at "93 %" (the last chunk is lost).
 3. Stream = 256-byte header `[frame_count, delay_ms/2 for each frame …, FF padding]` + frames + `FF` padding to a multiple of
    4096. A frame is 240×135 pixels, **RGB565 little-endian**, row-major from the top-left corner (red `F800` → bytes `00 F8`).
-   `<chunks> = len(stream) / 4096` (one frame = 16 chunks). The app uploads `04 18` + header only — no `04 F0` seen.
+   `<chunks> = len(stream) / 4096` (one frame = 16 chunks), sent as 16-bit little-endian in bytes 8-9 of the `04 72 02` header
+   (a 135-frame upload = 2136 chunks was accepted and restored the original animation). The app uploads `04 18` + header only — no `04 F0` seen.
 4. The layout file declares `gif_headlength=256`, `gif_maxframes=140`, 240×135.
 
 ## Real-time Lighting (decoded, works)
