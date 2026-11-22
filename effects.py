@@ -209,7 +209,7 @@ class Runner:
         try:
             if getattr(self.kb, 'wireless', False):         # 2.4G: the keyboard draws the equaliser from 19 column levels
                 if getattr(self.effect, 'mode', None) != 'Bars' or not hasattr(self.effect, 'level'):
-                    raise OSError('This effect needs the USB cable. Over 2.4G only Music Rhythm "Bars" works.')
+                    raise OSError('This effect needs the USB cable. Over 2.4G only the Equalizer works.')
 
                 def levels(t):
                     frame(t)

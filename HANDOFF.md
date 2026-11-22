@@ -77,8 +77,8 @@ the user to make **specific assignments** in its UI and Apply once, then decode 
 Its English strings: `research/ak980_extract/en_strings.txt`. Always rebuild the captured bytes offline, then verify on hardware (the user presses keys and reports).
 
 ## Open work / ideas
-1. Check the GUI's System page applies Toggle correctly (wired and 2.4G) after the `set_system` timing fix; check the GUI over the dongle (it has not been run with the cable out).
+1. GUI over the dongle was clicked through 2026-11-22 (Lighting, Per-key, Keys Fn remap + reset, System Apply, Reactive Equalizer with music, Macros/Screen/Profiles render). Still to eyeball: Fn Toggle via the System page on the cable, Macros page assign flow over the dongle.
 2. **2.4G leftovers**: none planned (key glow / Bass pulse / screen are not offered by the official app over the dongle). Run the GUI with the cable out and check every page.
 3. Real-time Lighting scheme export (only the per-key scheme was captured), more Music Rhythm modes of the official app.
 4. Still unverified on hardware: effect ids 2-7, 10, 12+, "LED Off", direction byte, key response level 1, the screen clock, My Computer/Copy/Paste/Cut shortcuts, Music Rhythm in the GUI with music, bass pulse.
-5. Polish left: high-DPI scaling was deliberately NOT done (fixed-size widgets; the program runs DPI-virtualised, fine but slightly soft - needs a visual pass on a scaled screen), on-screen keycap legends are ANSI, the GUI's look was never seen by the assistant (ask the user for feedback). Done in 1.0.6: X-button setting (System > Window, `appsettings.py`), tests (`python -m unittest discover -s tests`).
+5. Pages now scroll (ScrollHost in ak980_gui.py) when taller than the window, e.g. Keys on small screens. Polish left: high-DPI scaling was deliberately NOT done (fixed-size widgets; the program runs DPI-virtualised, fine but slightly soft - needs a visual pass on a scaled screen), on-screen keycap legends are ANSI, the GUI's look was never seen by the assistant (ask the user for feedback). Done in 1.0.6: X-button setting (System > Window, `appsettings.py`), tests (`python -m unittest discover -s tests`).

@@ -580,7 +580,7 @@ class DongleKeyboard:
             self.music_frame([0] * 19)
 
     def stream_realtime(self, *a, **k):
-        raise OSError('Per-key real-time effects need the USB cable; over 2.4G only Music Rhythm "Bars" works.')
+        raise OSError('Per-key real-time effects need the USB cable; over 2.4G only the Equalizer works.')
 
     upload_screen = realtime_frame = _unsupported
 

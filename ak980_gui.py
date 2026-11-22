@@ -73,6 +73,52 @@ class NavItem(tk.Frame):
         self._paint(False)
 
 
+class ScrollHost(tk.Frame):
+    """A page container that scrolls vertically when the page is taller than the window (small or scaled screens). The scrollbar
+    only appears when needed; the page still fills the area when it is shorter."""
+
+    def __init__(self, parent):
+        super().__init__(parent, bg=C['bg'])
+        from tkinter import ttk
+        self.canvas = tk.Canvas(self, bg=C['bg'], highlightthickness=0, bd=0)
+        self.bar = ttk.Scrollbar(self, orient='vertical', command=self.canvas.yview)
+        self.canvas.configure(yscrollcommand=self.bar.set)
+        self.canvas.pack(side='left', fill='both', expand=True)
+        self.body = tk.Frame(self.canvas, bg=C['bg'])
+        self.win = self.canvas.create_window(0, 0, window=self.body, anchor='nw')
+        self.body.bind('<Configure>', lambda e: self._fit())
+        self.canvas.bind('<Configure>', lambda e: self._fit())
+        self._bar_on = False
+        self._poll()
+
+    def _poll(self):
+        # a page can grow after its first layout without the body being resized, so re-check while the page is visible
+        try:
+            if self.winfo_ismapped():
+                self._fit()
+            self.after(250, self._poll)
+        except tk.TclError:
+            pass
+
+    def _fit(self):
+        w, h = self.canvas.winfo_width(), self.canvas.winfo_height()
+        need = self.body.winfo_reqheight()
+        total = need + (40 if need > h + 1 else 0)        # the status bar covers the end of the canvas: leave room to scroll past it
+        self.canvas.itemconfigure(self.win, width=w, height=max(h, total))
+        self.canvas.configure(scrollregion=(0, 0, w, max(h, total)))
+        if need > h + 1 and not self._bar_on:
+            self.bar.pack(side='right', fill='y')
+            self._bar_on = True
+        elif need <= h + 1 and self._bar_on:
+            self.bar.pack_forget()
+            self._bar_on = False
+            self.canvas.yview_moveto(0)
+
+    def wheel(self, delta):
+        if self._bar_on:
+            self.canvas.yview_scroll(-1 if delta > 0 else 1, 'units')
+
+
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -160,9 +206,12 @@ class App(tk.Tk):
         Btn(self.banner, 'Close it', self._kill_official, 'primary', height=28, size=9).pack(side='right', padx=12, pady=6)
         self.content = tk.Frame(main, bg=C['bg'])
         self.content.pack(fill='both', expand=True, padx=28, pady=(8, 0))
-        self.pages = {}
+        self.pages, self.hosts = {}, {}
         for name, icon, cls in NAV:
-            self.pages[name] = cls(self.content, self)
+            self.hosts[name] = ScrollHost(self.content)
+            self.pages[name] = cls(self.hosts[name].body, self)
+            self.pages[name].pack(fill='both', expand=True)
+        self.bind_all('<MouseWheel>', self._on_wheel)
         sb = tk.Frame(main, bg=C['side'])
         sb.pack(fill='x', side='bottom')
         self.dot = tk.Canvas(sb, width=14, height=14, bg=C['side'], highlightthickness=0)
@@ -174,13 +223,18 @@ class App(tk.Tk):
         self.status_msg('Starting...', 'info')
         self.show('Lighting')
 
+    def _on_wheel(self, e):
+        """Mouse wheel scrolls the page unless the pointer is over a widget that scrolls by itself."""
+        if self.current and e.widget.winfo_class() not in ('Listbox', 'Text', 'Treeview', 'TCombobox', 'Scale', 'TScale'):
+            self.hosts[self.current].wheel(e.delta)
+
     def show(self, name):
         if self.current:
-            self.pages[self.current].pack_forget()
+            self.hosts[self.current].pack_forget()
             self.nav[self.current].select(False)
         self.current = name
         pg = self.pages[name]
-        pg.pack(fill='both', expand=True)
+        self.hosts[name].pack(fill='both', expand=True)
         pg.on_show()
         self.nav[name].select(True)
         self.h_title.configure(text=pg.title)
