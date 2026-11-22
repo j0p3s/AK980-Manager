@@ -758,8 +758,13 @@ class SystemPage(Page):
 
     def on_show(self):
         import bootstrap
-        sha = bootstrap._state().get('sha')
-        self.ver.configure(text='Version: %s' % (sha[:7] if sha else ('developer checkout' if bootstrap.is_dev_checkout() else 'unknown')))
+        from version import VERSION
+        if bootstrap.FROZEN:
+            txt = 'Version %s (packaged program)' % VERSION
+        else:
+            sha = bootstrap._state().get('sha')
+            txt = 'Version %s - %s' % (VERSION, sha[:7] if sha else ('developer checkout' if bootstrap.is_dev_checkout() else 'unknown build'))
+        self.ver.configure(text=txt)
 
     def apply(self):
         if not self.app.require_kb():
@@ -777,6 +782,7 @@ class SystemPage(Page):
         def job():
             r = bootstrap.self_update(force=True)
             msg = {'updated': ('Updated. Restart the program to use the new version.', C['ok']),
+                   'staged': ('A new version was downloaded. Close the program; it restarts itself updated.', C['ok']),
                    'current': ('You have the newest version.', C['ok']),
                    'skipped': ('Updates are off in a developer checkout.', C['muted']),
                    'offline': ('Could not reach GitHub. Will try again later.', C['warn'])}[r]

@@ -20,13 +20,22 @@ Windows, Python 3.10+ (Tkinter), Pillow. Licensed under the **GNU GPL v3 or late
 
 ## Install and run
 
-Double-click **`Start AK980 Manager.bat`**. That is all: on the first run it installs Python 3.12 if the PC has none (via winget),
+**Easiest - the packaged program:** download `AK980-Manager-windows.zip` from the
+[Releases](https://github.com/j0p3s/AK980-Manager/releases) page, unzip it anywhere and double-click `AK980 Manager.exe` (a few supporting
+files sit in the `lib` subfolder). Nothing else to install: the keyboard works through Windows' built-in HID driver, so no driver is needed.
+It checks GitHub Releases for a newer version every few hours and updates itself (download is verified with a SHA-256 checksum).
+
+**From source:** double-click **`Start AK980 Manager.bat`**. On the first run it installs Python 3.12 if the PC has none (via winget),
 and the program then installs the packages it needs (Pillow, numpy, soundcard) by itself, with a small "Setting up" window.
 Afterwards it keeps itself up to date without asking: about every 6 hours it checks GitHub for a newer version (downloaded,
-syntax-checked, swapped in, rolled back if anything fails) and about once a week it upgrades its packages. Your settings live in
-`%APPDATA%\AK980Manager` and are never touched by an update; everything is logged to `%APPDATA%\AK980Manager\bootstrap.log`.
-Offline is fine (it tries again next start). Updates are skipped in a git checkout (a developer copy) or when the environment
-variable `AK980_NO_UPDATE` is set. Doing it by hand: `pip install -r requirements.txt`, then `python ak980_gui.py`.
+syntax-checked, swapped in, rolled back if anything fails) and about once a week it upgrades its packages.
+Updates are skipped in a git checkout (a developer copy) or when the environment variable `AK980_NO_UPDATE` is set.
+By hand: `pip install -r requirements.txt`, then `python ak980_gui.py`.
+
+Your settings live in `%APPDATA%\AK980Manager` and are never touched by an update; everything is logged to
+`%APPDATA%\AK980Manager\bootstrap.log`. Offline is fine (it tries again next start).
+
+Building the `.exe` yourself: `python tools/build_exe.py` (PyInstaller), see the header of that file for publishing a release.
 
 1. Plug the keyboard in with the **USB cable** (wired mode) and set it to USB mode.
 2. **Close the official AJAZZ app first** (also its tray icon). It polls the keyboard about 12 times a second, which breaks

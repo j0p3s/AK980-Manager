@@ -7,6 +7,7 @@
 # without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
 # Public License (LICENSE) for more details. Not affiliated with or endorsed by AJAZZ.
 """AK980 Manager - main window (English UI). Close the official AJAZZ app first (a banner offers to do it)."""
+import os
 import queue
 import subprocess
 import sys
@@ -22,6 +23,12 @@ NAV = [('Lighting', '☀', pages.LightingPage), ('Per-key', '▦', pages.PerKeyP
        ('Keys', '⌨', pages.KeysPage), ('Macros', '≣', pages.MacrosPage), ('Screen', '▭', pages.ScreenPage),
        ('System', '⚙', pages.SystemPage)]
 NO_WINDOW = 0x08000000
+
+
+def _resource(rel):
+    """Path of a bundled file, both from source and from the packaged .exe."""
+    base = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, rel)
 
 
 def official_app_running():
@@ -69,6 +76,10 @@ class App(tk.Tk):
         self.geometry('1240x820')
         self.minsize(1100, 740)
         theme.setup(self)
+        try:
+            self.iconbitmap(default=_resource('assets/icon.ico'))
+        except Exception:
+            pass
         self.kb = None
         self.streaming = False
         self.pending = None
@@ -265,9 +276,39 @@ class App(tk.Tk):
         self.destroy()
 
 
+def selftest():
+    """`AK980 Manager.exe --selftest`: checks that the bundled packages and the keyboard work; writes selftest.txt next to the settings."""
+    out = []
+
+    def check(name, fn):
+        try:
+            out.append('%-10s ok  %s' % (name, fn() or ''))
+        except Exception as e:
+            out.append('%-10s FAIL %s: %s' % (name, type(e).__name__, e))
+    check('keyboard', lambda: ak980.find_path() or (_ for _ in ()).throw(OSError('keyboard not found')))
+    check('pillow', lambda: __import__('PIL.Image', fromlist=['Image']).__name__)
+    import effects
+
+    def audio():
+        eq = effects.Equalizer()
+        eq.close()
+        return eq.device
+    check('audio', audio)
+    check('glow', lambda: len(effects.KeyGlow().frame(0.0)))
+    os.makedirs(pages.DATA, exist_ok=True)
+    with open(os.path.join(pages.DATA, 'selftest.txt'), 'w', encoding='utf-8') as f:
+        f.write(chr(10).join(out) + chr(10))
+
+
 def main():
+    if '--selftest' in sys.argv:
+        selftest()
+        return
     import bootstrap
-    if bootstrap.run_startup() == 'updated':      # new program files were downloaded: start again so they are the ones running
+    r = bootstrap.run_startup()
+    if r == 'staged':                              # packaged .exe: a helper swaps the folder after we exit and restarts the new version
+        sys.exit(0)
+    if r == 'updated':                             # new program files were downloaded: start again so they are the ones running
         subprocess.Popen([sys.executable] + sys.argv)
         sys.exit(0)
     App().mainloop()

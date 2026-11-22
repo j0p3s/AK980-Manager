@@ -6,3 +6,8 @@ research/
 *.pcapng
 hid_log.txt
 captures/
+# packaged .exe build output
+build/
+dist/
+*.spec
+

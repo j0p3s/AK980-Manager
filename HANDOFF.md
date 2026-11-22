@@ -90,7 +90,9 @@ unpacked vendor installer. It is in `.gitignore` on purpose; do not publish it.
 6. **New GUI (2026-11-22) was checked by code only**: every page builds, no clipped widgets (geometry walk), reactive modes start/stop on the real keyboard,
    key assign/restore and per-key paint work. Nobody has looked at it yet (screenshots could not be viewed in that session) - ask the user for visual
    feedback (spacing, colours, the on-screen keyboard shapes in `keyboard_view.py`, which approximate the real key sizes).
-7. **Single .exe** (asked by the user): PyInstaller 6.22 is available (`--windowed --contents-directory lib`). The keyboard needs NO driver (Windows' built-in
-   HID class driver is used), so there is nothing to bundle. A frozen build cannot pip-install, so `bootstrap.py` needs a frozen mode: skip pip, update from a
-   GitHub Release zip (swap the folder after exit with a helper script). Releases would be published with `gh release create` (gh is logged in as j0p3s).
-
+7. **Single .exe** (asked by the user; BUILT 2026-11-22, not yet released): `python tools/build_exe.py` -> `dist/AK980 Manager/AK980 Manager.exe` + `lib/`
+   (PyInstaller 6.22, `--contents-directory lib`, ~11 MB exe, 44 MB zip) and `dist/AK980-Manager-windows.zip(.sha256)`. No driver is bundled: the keyboard uses
+   Windows' built-in HID class driver. `AK980 Manager.exe --selftest` writes `%APPDATA%\AK980Manager\selftest.txt` (keyboard / Pillow / audio / glow) - all ok on
+   the user's PC. Frozen mode in `bootstrap.py`: no pip; updates come from the latest GitHub Release (zip asset ending `-windows.zip`, optional `.sha256` is
+   enforced, helper `apply.bat` swaps the folder after exit and restarts); tested only against a simulated release. **Publishing is the user's call**: bump
+   `version.py`, run the build, then `gh release create vX.Y.Z dist/AK980-Manager-windows.zip dist/AK980-Manager-windows.zip.sha256` (gh is logged in as j0p3s).

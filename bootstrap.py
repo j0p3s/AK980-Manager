@@ -24,7 +24,8 @@ import time
 import urllib.request
 import zipfile
 
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
+FROZEN = bool(getattr(sys, 'frozen', False))      # running as the packaged .exe (PyInstaller)
+APP_DIR = os.path.dirname(sys.executable) if FROZEN else os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(os.environ.get('APPDATA') or os.path.expanduser('~'), 'AK980Manager')
 STATE_FILE = os.path.join(DATA_DIR, 'update.json')
 LOG_FILE = os.path.join(DATA_DIR, 'bootstrap.log')
@@ -36,8 +37,8 @@ PACKAGES = {'pillow': 'PIL', 'numpy': 'numpy', 'soundcard': 'soundcard'}
 PIP_UPGRADE_EVERY = 7 * 24 * 3600
 SELF_UPDATE_EVERY = 6 * 3600
 # only these are ever replaced by a self-update; user settings live in %APPDATA% and are never touched
-UPDATE_EXT = ('.py', '.pyw', '.md', '.txt', '.bat', '.ps1')
-UPDATE_DIRS = ('', 'docs', 'tools')
+UPDATE_EXT = ('.py', '.pyw', '.md', '.txt', '.bat', '.ps1', '.ico')
+UPDATE_DIRS = ('', 'docs', 'tools', 'assets')
 NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
 
 
@@ -90,6 +91,8 @@ def _pip(args, timeout=300):
 def ensure_dependencies(progress=None, force_upgrade=False):
     """Install what is missing; upgrade everything about once a week. Returns the list of packages still missing."""
     say = progress or (lambda m: None)
+    if FROZEN:                          # the .exe carries its packages; they are updated with the program
+        return []
     if not _have('pip'):
         say('Preparing the package installer...')
         try:
@@ -133,6 +136,8 @@ def self_update(progress=None, force=False):
     st = _state()
     if not force and time.time() - st.get('checked', 0) < SELF_UPDATE_EVERY:
         return 'skipped'
+    if FROZEN:
+        return _update_exe(st, say)
     try:
         with _open('https://api.github.com/repos/%s/commits/%s' % (REPO, BRANCH)) as r:
             sha = json.load(r)['sha']
@@ -196,6 +201,73 @@ def self_update(progress=None, force=False):
         return 'offline'
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _vtuple(v):
+    out = []
+    for p in v.lstrip('vV').split('.'):
+        digits = ''.join(ch for ch in p if ch.isdigit())
+        out.append(int(digits) if digits else 0)
+    return tuple(out)
+
+
+def _update_exe(st, say):
+    """Packaged .exe: look for a newer GitHub Release, download its zip, and let a helper script swap the folder after we exit.
+    Returns 'current', 'offline' or 'staged' (the caller must exit now: the helper restarts the new version)."""
+    try:
+        from version import VERSION
+        with _open('https://api.github.com/repos/%s/releases/latest' % REPO) as r:
+            rel = json.load(r)
+        st['checked'] = time.time()
+        if _vtuple(rel['tag_name']) <= _vtuple(VERSION):
+            _save_state(st)
+            return 'current'
+        assets = {a['name']: a['browser_download_url'] for a in rel.get('assets', [])}
+        zname = next((n for n in assets if n.lower().endswith('-windows.zip')), None)
+        if not zname:
+            _save_state(st)
+            return 'current'
+        say('Downloading version %s...' % rel['tag_name'])
+        tmp = tempfile.mkdtemp(prefix='ak980_exe_')
+        with _open(assets[zname], timeout=120) as r:
+            data = r.read()
+        if zname + '.sha256' in assets:         # published next to the zip: refuse a download that does not match
+            import hashlib
+            with _open(assets[zname + '.sha256']) as r:
+                want = r.read().decode().split()[0].lower()
+            if hashlib.sha256(data).hexdigest() != want:
+                raise ValueError('checksum mismatch')
+        new = os.path.join(tmp, 'new')
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            for n in z.namelist():
+                if '..' in n or n.startswith('/') or ':' in n:
+                    raise ValueError('unsafe path in archive')
+            z.extractall(new)
+        root = new
+        entries = os.listdir(new)
+        if len(entries) == 1 and os.path.isdir(os.path.join(new, entries[0])):
+            root = os.path.join(new, entries[0])
+        exe = os.path.basename(sys.executable)
+        if not os.path.exists(os.path.join(root, exe)):
+            raise ValueError('archive does not contain %s' % exe)
+        bat = os.path.join(tmp, 'apply.bat')
+        lines = ['@echo off', ':wait',
+                 'tasklist /FI "PID eq %d" 2>nul | find "%d" >nul && (ping -n 2 127.0.0.1 >nul & goto wait)' % (os.getpid(), os.getpid()),
+                 'robocopy "%s" "%s" /E /R:3 /W:1 /NFL /NDL /NJH /NJS >nul' % (root, APP_DIR),
+                 'start "" "%s"' % sys.executable, 'rmdir /S /Q "%s"' % tmp, '']
+        with open(bat, 'w', newline='') as f:
+            f.write(''.join(l + chr(13) + chr(10) for l in lines))     # CRLF line endings
+        subprocess.Popen(['cmd', '/c', bat], creationflags=NO_WINDOW | 0x00000200, close_fds=True)   # hidden console + own process group, outlives us
+        st['tag'] = rel['tag_name']
+        _save_state(st)
+        log('staged update to %s' % rel['tag_name'])
+        return 'staged'
+    except Exception as e:
+        log('exe update failed: %s' % e)
+        if 'tmp' in locals():
+            shutil.rmtree(tmp, ignore_errors=True)
+        _save_state(st)
+        return 'offline'
 
 
 def run_startup(gui=True):
