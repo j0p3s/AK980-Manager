@@ -177,6 +177,18 @@ class LightingPage(Page):
         self.kv.pack()
         self._preview()
 
+    def load_state(self):
+        """Show the settings in app.light (after a profile was loaded) without sending anything to the keyboard."""
+        st = self.app.light
+        self.eff_var.set(st['effect'])
+        self.bright.set(st['bright'])
+        self.speed.set(st['speed'])
+        self.colorful.set(st['colorful'])
+        self.reverse.set(bool(st['direction']))
+        for n, c in self.chips.items():
+            c.select(n == st['effect'])
+        self._preview()
+
     def choose(self, name):
         self.eff_var.set(name)
         for n, c in self.chips.items():
@@ -191,7 +203,7 @@ class LightingPage(Page):
     def _changed(self):
         st = self.app.light
         st.update(effect=self.eff_var.get(), bright=self.bright.get(), speed=self.speed.get(),
-                  colorful=self.colorful.get(), direction=int(self.reverse.get()))
+                  colorful=self.colorful.get(), direction=int(self.reverse.get()), mode='effect')
         self._preview()
         save_json(LIGHT_FILE, st)
         self.app.push_lighting()
@@ -278,6 +290,8 @@ class PerKeyPage(Page):
         if not self.app.require_kb():
             return
         save_json(PERKEY_FILE, self.colors)
+        self.app.light['mode'] = 'perkey'
+        save_json(LIGHT_FILE, self.app.light)
         cols = {li: hex_rgb(c) for li, c in self.colors.items()}
         br = int(self.bright.get())
         self.app.run(lambda kb: kb.set_user_lighting(cols, brightness=br), 'Per-key colours applied')
@@ -738,9 +752,8 @@ class KeysPage(Page):
         self.select(self.sel)
         save_json(KEYMAP_FILE, self.maps)
 
-    def apply(self):
-        if not self.app.require_kb():
-            return
+    def build_layers(self):
+        """The keymap as {layer: {key_index: (type, a, b)}} ready for the keyboard, or None if a macro is missing."""
         names = [m['name'] for m in self.app.macros]
         layers = {'top': {}, 'fn': {}}
         for l, m in self.maps.items():
@@ -748,10 +761,18 @@ class KeysPage(Page):
                 if 'macro' in e:
                     if e['macro'] not in names:
                         messagebox.showerror('Macro', 'Macro "%s" no longer exists' % e['macro'])
-                        return
+                        return None
                     layers[l][i] = (6, names.index(e['macro']), 0)
                 else:
                     layers[l][i] = (e['t'], e['a'], e['b'])
+        return layers
+
+    def apply(self):
+        if not self.app.require_kb():
+            return
+        layers = self.build_layers()
+        if layers is None:
+            return
         save_json(KEYMAP_FILE, self.maps)
         self._write(layers, 'Keymap applied (both layers)')
 

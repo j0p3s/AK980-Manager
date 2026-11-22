@@ -16,13 +16,14 @@ import tkinter as tk
 
 import ak980
 import pages
+import profiles
 import theme
 import tray
 from theme import C, Btn, label
 
 NAV = [('Lighting', '☀', pages.LightingPage), ('Per-key', '▦', pages.PerKeyPage), ('Reactive', '♫', pages.ReactivePage),
        ('Keys', '⌨', pages.KeysPage), ('Macros', '≣', pages.MacrosPage), ('Screen', '▭', pages.ScreenPage),
-       ('System', '⚙', pages.SystemPage)]
+       ('Profiles', '◧', profiles.ProfilesPage), ('System', '⚙', pages.SystemPage)]
 NO_WINDOW = 0x08000000
 
 

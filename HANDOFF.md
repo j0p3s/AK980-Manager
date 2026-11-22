@@ -93,7 +93,7 @@ unpacked vendor installer. It is in `.gitignore` on purpose; do not publish it.
    3 exclusive configs, lighting-scheme import/export, TFT frame editor + GIF export.
 3. Verify the remaining effect ids, "LED Off", direction byte, key response level 1, and the clock on the screen by eye.
 4. 2.4G dongle (`0C45:FEFE`, interface MI_03) and Bluetooth modes.
-5. Polish: profiles (the app has 3 "exclusive configs"), import/export, a proper installer or PyInstaller build, tests for the table builders.
+5. Profiles DONE (v1.0.5 work, `profiles.py`, app-side .json files, not the keyboard's own slots; load and apply verified on the real keyboard by the user). Polish: a proper installer or PyInstaller build, tests for the table builders.
 6. **New GUI (2026-11-22) was checked by code only**: every page builds, no clipped widgets (geometry walk), reactive modes start/stop on the real keyboard,
    key assign/restore and per-key paint work. Nobody has looked at it yet (screenshots could not be viewed in that session) - ask the user for visual
    feedback (spacing, colours, the on-screen keyboard shapes in `keyboard_view.py`, which approximate the real key sizes).
