@@ -351,7 +351,7 @@ def selftest():
             out.append('%-10s ok  %s' % (name, fn() or ''))
         except Exception as e:
             out.append('%-10s FAIL %s: %s' % (name, type(e).__name__, e))
-    check('keyboard', lambda: ak980.find_path() or (_ for _ in ()).throw(OSError('keyboard not found')))
+    check('keyboard', lambda: ('wired' if ak980.find_path() else '2.4G dongle' if ak980.find_path('mi_03', ak980.DONGLE_PID) else (_ for _ in ()).throw(OSError('keyboard not found'))))
     check('pillow', lambda: __import__('PIL.Image', fromlist=['Image']).__name__)
     import effects
 
