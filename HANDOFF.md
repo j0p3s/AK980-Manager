@@ -1,6 +1,6 @@
 # Handoff — AK980 Manager
 
-Last updated: 2026-11-22 (second long session: real-time lighting solved, Music Rhythm, auto-setup/updates, new GUI). Repository: https://github.com/j0p3s/AK980-Manager · License: GPL-3.0-or-later.
+Last updated: 2026-11-22 (second long session: real-time lighting solved, Music Rhythm, auto-setup/updates, new GUI, .exe build). Repository: https://github.com/j0p3s/AK980-Manager · License: GPL-3.0-or-later.
 
 ## What this is
 English control software for the user's **AJAZZ AK980 V2 PRO** keyboard (Sonix `0C45:8009`), because the official app is Chinese-only.
@@ -18,7 +18,12 @@ The protocol was reverse engineered from the official app; the full description 
 | System: sleep time, key response level | sent byte-identical to the app's packets; **effect not observable** by eye, so only matched to captures |
 | Clock sync | sent like the app does; screen clock not checked visually |
 | Fn key Momentary/Toggle (System tab, `set_system(..., fn_toggle)`) | byte 5 of the `04 17` packet decoded from the official app (0 = Momentary, 1 = Toggle); **not yet verified on hardware** |
-| GUI tabs: Lighting, Keys, Macros, Per-key, Screen, System | start and connect; the Macros, System and Per-key tabs were smoke-tested but not clicked through at length |
+| Real-time lighting stream (`04 20` frames) | works since 2026-11-22: fixed slot order + `04 02` + status reads (see docs/PROTOCOL.md); ~20 fps, verified by eye |
+| Key glow (pressed keys light up and fade) | works, verified by eye, no noticeable delay (key state read on the PC) |
+| Music Rhythm (equalizer / bass pulse from PC audio) | equalizer verified by eye from the CLI tool; in the GUI the audio-thread COM bug was fixed but only checked for "no error"; bass pulse not eyeballed |
+| GUI (rebuilt 2026-11-22: sidebar, on-screen keyboard, Reactive tab) | every page builds, no clipped widgets, reactive modes start/stop, key assign / per-key paint work; **the user has not reviewed the look yet** |
+| Auto-setup + auto-update (`bootstrap.py`, `Start AK980 Manager.bat`) | tested in a clean venv and on a copy without `.git`; the winget "install Python" path is untested |
+| Packaged `AK980 Manager.exe` (`tools/build_exe.py`) | builds, runs, `--selftest` ok; exe auto-update tested only against a simulated release; **no GitHub Release published** (user said "not yet") |
 
 ## How to run
 Double-click `Start AK980 Manager.bat` (installs Python via winget if missing; the program then installs its own packages and updates itself from GitHub
@@ -30,10 +35,10 @@ A desktop shortcut "AK980 Manager.lnk" was created on the user's desktop (target
 * **Verify the Fn switch on hardware:** close the official app, in the System tab choose "Toggle", Apply; remap Fn-layer Q→W
   on the Keys tab and Apply; then tap Fn once, release, press Q → should type `w` until Fn is tapped again. Set it back to
   Momentary afterwards.
-* The session ended while the **official app was still running with its Frida logger stopped**. The official app re-applies its
-  saved profile, so the keyboard may currently have the old test remaps (A→Volume+, B→Left Shift, F/G macros, Fn Q→W) and the
-  Fn switch may be on Toggle. Close the official app and use the Keys tab "Reset all keys to default" (and System tab →
-  Momentary) to clean up.
+* The old test remaps (A→Volume+, B→Left Shift, F/G macros, Fn Q→W) were **reset on 2026-11-22** (both layers) and verified by typing. If the official app is
+  started again it re-applies its saved profile and they come back: reset again (Keys page → Reset all keys). The keyboard's stored test macros are unused.
+* **Release decision pending**: the user wants to publish the .exe later (see Open work 7). Ask before running `gh release create`.
+* **Wait for the user's feedback on the new GUI look** before polishing further.
 * Real-time Lighting is solved and works from our code (see Open work 2 and docs/PROTOCOL.md). The official app's own Real-time
   page only sent black frames on this unit and turned the lights off; selecting any normal effect (Lighting tab) restores it.
 * Key response levels 1-5 exist in the official app; the System tab only offers the verified 2 and 3.
