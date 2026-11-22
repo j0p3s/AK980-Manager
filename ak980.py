@@ -111,6 +111,9 @@ class Keyboard:
     # offset 4*key_index (see keys.py), ending with aa 55. An all-zero entry means "default".
     #   keyboard key : [0x02, modifier_mask, hid_usage, 0]   (modifier-only: usage 0)
     #   media key    : [0x03, usage_lo, usage_hi, 0]         (e.g. Volume Up = 0x00E9)
+    #   macro        : [0x06, macro_slot, play_mode, loop_count]   (mode 0 once, 1 multiple times = loop_count 1-255,
+    #                                                              2 stop when the key is pressed again, 3 until the key is released)
+    #   disable key  : [0x05, 0x03, 0, 0]
     #   mouse        : [0x01, class, value, 0]               (class 1 = button bit, 3 = wheel; see MOUSE in pages.py)
     MOD = {'LCtrl': 0x01, 'LShift': 0x02, 'LAlt': 0x04, 'LWin': 0x08,
            'RCtrl': 0x10, 'RShift': 0x20, 'RAlt': 0x40, 'RWin': 0x80}
@@ -133,7 +136,7 @@ class Keyboard:
         cmd = {'top': 0x11, 'fn': 0x27}[layer]
         tab = bytearray(576)
         for idx, e in entries.items():
-            tab[4 * idx:4 * idx + 3] = bytes(e)
+            tab[4 * idx:4 * idx + len(e)] = bytes(e)             # 3 or 4 bytes per entry
         tab[574:576] = bytes([0xAA, 0x55])
         pk = [bytes([0x04, 0x18]), bytes([0x04, cmd, 0, 0, 0, 0, 0, 0, 9])]
         pk += [bytes(tab[i:i + 64]) for i in range(0, 576, 64)]
@@ -186,8 +189,8 @@ class Keyboard:
         self.transaction(*pk)
 
     @staticmethod
-    def macro_entry(n):
-        return (0x06, n, 0)
+    def macro_entry(n, mode=0, count=0):
+        return (0x06, n, mode, count)
 
     # --- real-time lighting stream -------------------------------------------------------------
     # The official app drives its "Real-time Lighting" / music modes from the PC: ~20 frames per second, each frame =

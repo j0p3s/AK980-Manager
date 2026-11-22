@@ -46,6 +46,9 @@ All multi-packet tables end with the two bytes `AA 55`.
   Ctrl_R=98), table ends with `AA 55` at bytes 574-575. Always write the **whole** table; an all-zero entry = default key.
 * Entries: keyboard key `[02, modifier_mask, hid_usage, 0]` (modifier-only: usage 0), media/consumer key
   `[03, usage_lo, usage_hi, 0]` (Volume Up = `0x00E9`), macro `[06, macro_number, 0, 0]`.
+* Macro key `[06, slot, mode, count]` (captured 2026-11-22, verified): mode 0 once, 1 multiple times (count 1-255 in byte 3),
+  2 loop until the key is pressed again, 3 play while the key is held. Disable key `[05, 03, 0, 0]`. The app's Windows shortcuts are plain
+  key combinations: Show Desktop = LWin+D, Lock Computer = LWin+L, Close Window = LCtrl+W, Switch Windows = LAlt+Tab.
 * Mouse function `[01, class, value, 0]` (captured 2026-11-22, verified on hardware): class 1 = button bits (Left `01`, Right `02`, Middle `04`,
   Double Click `03`, Button 4/Back `08`, Button 5/Forward `10`), class 3 = wheel (Scroll Up `01`, Scroll Down `ff`).
 * Modifier mask: LCtrl 01, LShift 02, LAlt 04, LWin 08, RCtrl 10, RShift 20, RAlt 40, RWin 80.

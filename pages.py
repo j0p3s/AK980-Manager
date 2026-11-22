@@ -29,6 +29,11 @@ MEDIA = {'Volume Up': 0xE9, 'Volume Down': 0xEA, 'Mute': 0xE2, 'Play/Pause': 0xC
 # class 3 = wheel, value 01 = up / ff = down.
 MOUSE = {'Left Click': (1, 0x01), 'Right Click': (1, 0x02), 'Middle Click': (1, 0x04), 'Double Click': (1, 0x03),
          'Mouse Button 4 (Back)': (1, 0x08), 'Mouse Button 5 (Forward)': (1, 0x10), 'Scroll Up': (3, 0x01), 'Scroll Down': (3, 0xFF)}
+# Special key functions as the official app writes them (captured 2026-11-22). Shortcuts are plain key combinations.
+SPECIAL = {'Disable key (does nothing)': {'t': 5, 'a': 3, 'b': 0},
+           'Show Desktop  (Win + D)': {'t': 2, 'a': 0x08, 'b': 0x07}, 'Lock Computer  (Win + L)': {'t': 2, 'a': 0x08, 'b': 0x0F},
+           'Close Window  (Ctrl + W)': {'t': 2, 'a': 0x01, 'b': 0x1A}, 'Switch Windows  (Alt + Tab)': {'t': 2, 'a': 0x04, 'b': 0x2B}}
+PLAY_MODES = ['Play once', 'Play multiple times', 'Stop when the key is pressed again', 'Keep playing until the key is released']
 MODS = ['LCtrl', 'LShift', 'LAlt', 'LWin', 'RCtrl', 'RShift', 'RAlt', 'RWin']
 PRETTY = {'Shift_L': 'Left Shift', 'Shift_R': 'Right Shift', 'Ctrl_L': 'Left Ctrl', 'Ctrl_R': 'Right Ctrl', 'Win_L': 'Left Win',
           'Alt_L': 'Left Alt', 'del': 'Delete', 'home': 'Home', 'page up': 'Page Up', 'page down': 'Page Down', 'CapsLock': 'Caps Lock',
@@ -532,11 +537,22 @@ class KeysPage(Page):
         row = tk.Frame(b, bg=C['card'])
         row.pack(fill='x')
         label(row, 'Make it', 10, False, C['muted'], C['card']).pack(side='left', padx=(0, 10))
-        Seg(row, ('Key', 'Media', 'Mouse', 'Macro', 'Modifiers'), self.kind, self._kind_changed, width=92).pack(side='left')
+        Seg(row, ('Key', 'Media', 'Mouse', 'Macro', 'Special', 'Modifiers'), self.kind, self._kind_changed, width=86).pack(side='left')
         self.target = ttk.Combobox(row, state='readonly', width=24, height=18)
         self.target.pack(side='left', padx=14)
         self.target_hint = label(row, '', 10, False, C['muted'], C['card'])
+        self.macro_opts = tk.Frame(b, bg=C['card'])
+        label(self.macro_opts, 'Play', 10, False, C['muted'], C['card']).pack(side='left', padx=(0, 10))
+        self.play_mode = ttk.Combobox(self.macro_opts, values=PLAY_MODES, state='readonly', width=36)
+        self.play_mode.set(PLAY_MODES[0])
+        self.play_mode.pack(side='left')
+        self.play_mode.bind('<<ComboboxSelected>>', lambda e: (self._mode_changed(), self._preview()))
+        self.loop_label = label(self.macro_opts, 'times:', 10, False, C['muted'], C['card'])
+        self.loop_count = tk.IntVar(value=2)
+        self.loop_spin = ttk.Spinbox(self.macro_opts, from_=1, to=255, width=5, textvariable=self.loop_count, command=self._preview)
+        self.loop_spin.bind('<KeyRelease>', lambda e: self._preview())
         mods = tk.Frame(b, bg=C['card'])
+        self.mods_frame = mods
         mods.pack(fill='x', pady=(10, 0))
         label(mods, 'With modifiers', 10, False, C['muted'], C['card']).pack(side='left', padx=(0, 10))
         for m in MODS:
@@ -564,15 +580,31 @@ class KeysPage(Page):
 
     def _kind_changed(self):
         k = self.kind.get()
-        vals = list(MEDIA) if k == 'Media' else list(MOUSE) if k == 'Mouse' else [m['name'] for m in self.app.macros] if k == 'Macro' else list(self.names) + list(self.extra_keys) + list(self.char_entries)
+        vals = list(MEDIA) if k == 'Media' else list(MOUSE) if k == 'Mouse' else list(SPECIAL) if k == 'Special' else [m['name'] for m in self.app.macros] if k == 'Macro' else list(self.names) + list(self.extra_keys) + list(self.char_entries)
         self.target.configure(values=vals, state='disabled' if k == 'Modifiers' else 'readonly')
         self.target.set('')
+        if k == 'Macro':
+            self.macro_opts.pack(fill='x', pady=(10, 0), before=self.mods_frame)
+            self._mode_changed()
+        else:
+            self.macro_opts.pack_forget()
         self._preview()
         if k == 'Macro' and not vals:
             self.target_hint.configure(text='No macros yet - create one on the Macros page.')
             self.target_hint.pack(side='left')
         else:
             self.target_hint.pack_forget()
+
+    def _mode_changed(self):
+        multi = self.play_mode.get() == PLAY_MODES[1]
+        for w in (self.loop_label, self.loop_spin):
+            w.pack(side='left', padx=(12, 6)) if multi else w.pack_forget()
+
+    def _loops(self):
+        try:
+            return max(1, min(255, int(self.loop_count.get())))
+        except (tk.TclError, ValueError):
+            return 1
 
     def on_show(self):
         self._refresh_layout()
@@ -642,7 +674,11 @@ class KeysPage(Page):
             return (d[0] if d else (lab or '')), 'Default: what this key does on your layout.'
         t = e['t']
         if t == 6:
-            return 'macro "%s"' % e.get('macro', ''), 'Runs the macro "%s" (text typed on the Macros page).' % e.get('macro', '')
+            how = {0: 'once', 1: '%d times' % e.get('count', 1), 2: 'until you press the key again',
+                   3: 'for as long as you hold the key'}.get(e.get('mode', 0), 'once')
+            return 'macro "%s"' % e.get('macro', ''), 'Plays the macro "%s" %s.' % (e.get('macro', ''), how)
+        if t == 5:
+            return 'nothing', 'The key is disabled: pressing it does nothing.'
         if t == 3:
             return e['desc'], 'Media function: %s.' % e['desc']
         if t == 1:
@@ -684,7 +720,16 @@ class KeysPage(Page):
                 return {'t': 2, 'a': mask, 'b': code, 'desc': shown + '+' + self.usage_label[code]}
             return {'t': 2, 'a': mask, 'b': self.names[t][1], 'desc': (names + '+' if mask else '') + t}
         if k == 'Macro':
-            return {'t': 6, 'a': 0, 'b': 0, 'macro': t, 'desc': 'Macro: ' + t} if t else None
+            if not t:
+                return None
+            mode = PLAY_MODES.index(self.play_mode.get())
+            return {'t': 6, 'a': 0, 'b': 0, 'macro': t, 'mode': mode, 'count': self._loops() if mode == 1 else 0, 'desc': 'Macro: ' + t}
+        if k == 'Special':
+            if not t:
+                return None
+            e = dict(SPECIAL[t])
+            e['desc'] = t.split('  (')[0]
+            return e
         if k == 'Media':
             if not t:
                 return None
@@ -728,6 +773,13 @@ class KeysPage(Page):
                 self.kind.set('Macro')
                 self._kind_changed()
                 self.target.set(e.get('macro', ''))
+                self.play_mode.set(PLAY_MODES[min(3, e.get('mode', 0))])
+                self.loop_count.set(e.get('count') or 2)
+                self._mode_changed()
+            elif e['t'] == 5:
+                self.kind.set('Special')
+                self._kind_changed()
+                self.target.set(next(k for k, v in SPECIAL.items() if v['t'] == 5))
             elif e['t'] == 1:
                 self.kind.set('Mouse')
                 self._kind_changed()
@@ -797,7 +849,7 @@ class KeysPage(Page):
                     if e['macro'] not in names:
                         messagebox.showerror('Macro', 'Macro "%s" no longer exists' % e['macro'])
                         return None
-                    layers[l][i] = (6, names.index(e['macro']), 0)
+                    layers[l][i] = (6, names.index(e['macro']), e.get('mode', 0), e.get('count', 0))
                 else:
                     layers[l][i] = (e['t'], e['a'], e['b'])
         return layers
