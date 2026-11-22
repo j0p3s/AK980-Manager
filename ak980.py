@@ -180,6 +180,37 @@ class Keyboard:
     def macro_entry(n):
         return (0x06, n, 0)
 
+    # --- real-time lighting stream -------------------------------------------------------------
+    # The official app drives its "Real-time Lighting" / music modes from the PC: ~20 frames per second, each frame =
+    # header `04 20 00*6 08` + 8 packets (512 bytes) of [light_index, R, G, B] entries (one per key, layout row order),
+    # sent back to back without `04 18` / `04 F0`.
+    def realtime_frame(self, h, colors, default=(0, 0, 0)):
+        """Send one frame on an open handle `h`. colors: {light_index: (r, g, b)}."""
+        import keys as _keys
+        ent = bytearray()
+        for k in sorted(_keys.KEYS, key=lambda k: (k[4], k[5])):
+            li = k[3]
+            r, g, b = colors.get(li, default)
+            ent += bytes([li, r, g, b])
+        ent += bytes(512 - len(ent))
+        for p in [bytes([0x04, 0x20, 0, 0, 0, 0, 0, 0, 8])] + [bytes(ent[i:i + 64]) for i in range(0, 512, 64)]:
+            buf = bytes([0]) + p.ljust(64, b'\0')
+            if not hid.HidD_SetFeature(h, buf, 65):
+                raise OSError('SetFeature failed (%d)' % ctypes.get_last_error())
+
+    def stream_realtime(self, frame_fn, seconds, fps=20):
+        """Call frame_fn(t) -> {light_index: (r,g,b)} for `seconds` seconds at about `fps` frames/s."""
+        with self.lock:
+            h = self._open()
+            try:
+                t0 = time.time()
+                while time.time() - t0 < seconds:
+                    t = time.time() - t0
+                    self.realtime_frame(h, frame_fn(t))
+                    time.sleep(max(0.0, 1.0 / fps - (time.time() - t0 - t)))
+            finally:
+                k32.CloseHandle(h)
+
     # --- system settings ---------------------------------------------------------------------
     # `04 18`, `04 17 01 00*5 01`, then [00 01 0 0 0 0 sleep 00 level 00.. aa 55]
     # sleep: 0 = No Sleep, 1 = 1 min, 2 = 5 min, 3 = 30 min; level = key response level (2 and 3 verified).

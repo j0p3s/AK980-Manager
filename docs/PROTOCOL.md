@@ -86,7 +86,24 @@ Sent by the official app whenever it changes page; replayed by this software wit
    `<chunks> = len(stream) / 4096` (one frame = 16 chunks). The app uploads `04 18` + header only — no `04 F0` seen.
 4. The layout file declares `gif_headlength=256`, `gif_maxframes=140`, 240×135.
 
+## Real-time Lighting (partly decoded, does not light the keyboard)
+
+Opening the official app's *Real-time Lighting* page starts a PC-driven stream: command `04 20 00 00 00 00 00 00 08` followed by
+8 packets (512 bytes) of `[light_index, R, G, B]` entries (97 keys, in the layout's row order), about 20 frames per second,
+sent back to back without `04 18` / `04 F0`; no separate mode command was seen. On the tested unit **every streamed frame was
+black** whatever mode was picked (Rainbow Wave, Static On, Starlight, key presses), the keyboard went dark, and sending
+red frames with the same format from this software (official app closed) changed nothing. So the stream format is known
+(`Keyboard.realtime_frame`) but how to make the keyboard show it is **not** — probably a mode command that was sent before the
+capture started, or key-press events read from the keyboard (input reports were not logged). Music Rhythm very likely uses
+the same stream.
+
+## Other features seen in the official app's strings but not implemented
+
+Key response levels 1-5 (the app's text: about 2-3 / 5-6 / 8-9 / 13-14 / 17-18 ms wired; only 2 and 3 were captured),
+the Fn *Momentary / Toggle* switch, mouse-button key functions (Mouse Button 1-5), three "exclusive configs" and saved
+lighting schemes with import/export, the TFT frame editor and GIF export.
+
 ## Not decoded / not covered
 
-Mouse and modifier events and repeat count in macros, the second "Real-time Lighting" effect list, Music Rhythm (probably
-streamed from the PC), 2.4G / Bluetooth modes, the firmware update path, lighting effect "LED Off", key response level 1.
+Mouse and modifier events and repeat count in macros, Real-time Lighting and Music Rhythm (see above), 2.4G / Bluetooth modes,
+the firmware update path, lighting effect "LED Off".

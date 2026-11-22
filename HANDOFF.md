@@ -58,7 +58,13 @@ unpacked vendor installer. It is in `.gitignore` on purpose; do not publish it.
 
 ## Open work / ideas
 1. Macros: mouse events, repeat count, modifier events (capital letters, symbols) — capture the app recording Shift+A and a click.
-2. "Real-time Lighting" effect list and Music Rhythm — find out whether the keyboard or the PC drives them.
+2. **Real-time Lighting / Music Rhythm** (investigated, unresolved): the app streams `04 20` frames (512 bytes of
+   [light_index,R,G,B], ~20 fps) but on this unit all frames were black, the keyboard went dark and key presses did nothing; frames
+   sent from `Keyboard.realtime_frame()` did not light it either. Next ideas: log `ReadFile` (the keyboard may send key-press
+   input reports the app turns into colours), and capture the moment the page is *entered* from a fresh app start (a mode command
+   may precede the stream). The darkness is undone by selecting any normal effect.
+2b. From the app's English strings (`research/ak980_extract/en_strings.txt`): key response levels 1-5, Fn Momentary/Toggle,
+   mouse-button key functions, 3 exclusive configs, lighting-scheme import/export, TFT frame editor + GIF export.
 3. Verify the remaining effect ids, "LED Off", direction byte, key response level 1, and the clock on the screen by eye.
 4. 2.4G dongle (`0C45:FEFE`, interface MI_03) and Bluetooth modes.
 5. Polish: profiles (the app has 3 "exclusive configs"), import/export, a proper installer or PyInstaller build, tests for the table builders.

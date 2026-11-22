@@ -37,7 +37,12 @@ Use as a library: `import ak980; kb = ak980.Keyboard(); kb.set_lighting('Spectru
 * USB cable only (2.4G dongle / Bluetooth not tested).
 * Macros: no mouse events, no repeat count, no capital letters or symbols (captured only plain key presses).
 * Lighting effect ids beyond Static, Spectrum, Outward and Rolling are inferred from the list order; "LED Off" is not
-  implemented. Not covered: "Real-time Lighting" list, Music Rhythm, firmware update, Reset / Factory Reset (deliberately).
+  implemented.
+* **Real-time Lighting and Music Rhythm are not supported.** The stream format is known (`04 20`, per-key colours at ~20 fps,
+  see docs/PROTOCOL.md) but on the tested keyboard even the official app's Real-time page only produced black frames, and
+  streaming frames from here did not light the keyboard.
+* Not implemented: the Fn Momentary/Toggle switch, mouse-button key functions, multiple profiles, the screen frame editor,
+  firmware update, Reset / Factory Reset (deliberately).
 * Writes take time: a per-key / macro / keymap update needs a few seconds; a screen upload with many frames can take minutes.
 
 ## Repository layout
