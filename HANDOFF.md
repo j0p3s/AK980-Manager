@@ -32,8 +32,8 @@ A desktop shortcut "AK980 Manager.lnk" was created on the user's desktop (target
   saved profile, so the keyboard may currently have the old test remaps (A→Volume+, B→Left Shift, F/G macros, Fn Q→W) and the
   Fn switch may be on Toggle. Close the official app and use the Keys tab "Reset all keys to default" (and System tab →
   Momentary) to clean up.
-* Real-time Lighting was investigated and is unresolved (see Open work 2 and docs/PROTOCOL.md). It turned the keyboard dark in the
-  official app on this unit; selecting any normal effect (Lighting tab) restores it.
+* Real-time Lighting is solved and works from our code (see Open work 2 and docs/PROTOCOL.md). The official app's own Real-time
+  page only sent black frames on this unit and turned the lights off; selecting any normal effect (Lighting tab) restores it.
 * Key response levels 1-5 exist in the official app; the System tab only offers the verified 2 and 3.
 
 ## Things that bite (read before touching the keyboard)
@@ -72,11 +72,7 @@ unpacked vendor installer. It is in `.gitignore` on purpose; do not publish it.
 ## Open work / ideas
 0. Mouse-button key functions (Mouse Button 1-5 in the official key menu) — not captured yet.
 1. Macros: mouse events, repeat count, modifier events (capital letters, symbols) — capture the app recording Shift+A and a click.
-2. **Real-time Lighting / Music Rhythm** (investigated, unresolved): the app streams `04 20` frames (512 bytes of
-   [light_index,R,G,B], ~20 fps) but on this unit all frames were black, the keyboard went dark and key presses did nothing; frames
-   sent from `Keyboard.realtime_frame()` did not light it either. Next ideas: log `ReadFile` (the keyboard may send key-press
-   input reports the app turns into colours), and capture the moment the page is *entered* from a fresh app start (a mode command
-   may precede the stream). The darkness is undone by selecting any normal effect.
+2. **Real-time Lighting** (SOLVED 2026-11-22, see docs/PROTOCOL.md): frames need the fixed slot order, a `04 02` packet and a status read (wait for `01`) after the header and after `04 02`. `tools/keypress_glow.py` (pressed keys light up and fade) works, verified on hardware. Still to do: put it in the GUI (a "Reactive / Music" tab, music rhythm from the audio level), and a way to stop it cleanly.
 2b. From the app's English strings (`research/ak980_extract/en_strings.txt`): key response levels 1-5, Fn Momentary/Toggle,
    mouse-button key functions, 3 exclusive configs, lighting-scheme import/export, TFT frame editor + GIF export.
 3. Verify the remaining effect ids, "LED Off", direction byte, key response level 1, and the clock on the screen by eye.

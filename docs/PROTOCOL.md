@@ -88,16 +88,28 @@ Sent by the official app whenever it changes page; replayed by this software wit
    `<chunks> = len(stream) / 4096` (one frame = 16 chunks). The app uploads `04 18` + header only — no `04 F0` seen.
 4. The layout file declares `gif_headlength=256`, `gif_maxframes=140`, 240×135.
 
-## Real-time Lighting (partly decoded, does not light the keyboard)
+## Real-time Lighting (decoded, works)
 
-Opening the official app's *Real-time Lighting* page starts a PC-driven stream: command `04 20 00 00 00 00 00 00 08` followed by
-8 packets (512 bytes) of `[light_index, R, G, B]` entries (97 keys, in the layout's row order), about 20 frames per second,
-sent back to back without `04 18` / `04 F0`; no separate mode command was seen. On the tested unit **every streamed frame was
-black** whatever mode was picked (Rainbow Wave, Static On, Starlight, key presses), the keyboard went dark, and sending
-red frames with the same format from this software (official app closed) changed nothing. So the stream format is known
-(`Keyboard.realtime_frame`) but how to make the keyboard show it is **not** — probably a mode command that was sent before the
-capture started, or key-press events read from the keyboard (input reports were not logged). Music Rhythm very likely uses
-the same stream.
+The PC drives the keyboard's lights directly, ~20 frames per second. One frame is:
+
+1. `04 20 00 00 00 00 00 00 08` (SetFeature), then **read the status (GetFeature) ~6 ms later and wait until byte 3 is `01`**.
+2. 8 packets of 64 bytes = 512 bytes of `[light_index, R, G, B]` entries, back to back (~3 ms apart).
+3. `04 02`, then read the status again until byte 3 is `01`.
+
+Three details decide whether the keyboard shows the frame (all found 2026-11-22 by comparing with a USBPcap capture of the official app):
+
+* The entries must be in the official app's **fixed slot order** (`Keyboard.RT_SLOTS`, 97 entries + zero padding), not layout-row order.
+* The keyboard answers the status read with `04 xx 00 01` when ready and `00` / `FF` while busy. A frame sent while busy is dropped
+  (this looked like "the keyboard ignores the stream"). Reading the status *immediately* after a write (before ~6 ms) provoked
+  long busy periods (0.5-1.5 s); reading it 6 ms later like the app does keeps the stream smooth.
+* Send at about 20 fps (the app's rate, 48 ms median); faster only queues frames and adds visible lag.
+
+The stream works over a built-in effect or the per-key mode; when streaming stops, the keyboard falls back to its own effect.
+The keyboard does **not** report key presses to the PC (no input reports on the vendor interfaces, and the official app never reads
+any), so a key-press effect is computed on the PC (global key state) and streamed: see `tools/keypress_glow.py`. On the tested
+unit the official app's own Real-time page only ever sent black frames (and turned the lights off), so its effects there are not a
+reference. Music Rhythm very likely uses the same stream.
+Code: `Keyboard.realtime_frame`, `Keyboard.stream_realtime`.
 
 ## Other features seen in the official app's strings but not implemented
 

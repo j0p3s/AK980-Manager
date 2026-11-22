@@ -182,21 +182,42 @@ class Keyboard:
 
     # --- real-time lighting stream -------------------------------------------------------------
     # The official app drives its "Real-time Lighting" / music modes from the PC: ~20 frames per second, each frame =
-    # header `04 20 00*6 08` + 8 packets (512 bytes) of [light_index, R, G, B] entries (one per key, layout row order),
-    # sent back to back without `04 18` / `04 F0`.
+    # header `04 20 00*6 08` + 8 packets (512 bytes) of [light_index, R, G, B] entries, then a `04 02` status packet.
+    # The keyboard only shows the frame if the entries come in the app's fixed slot order (RT_SLOTS, captured from the
+    # official app) and the `04 02` packet follows; a frame in layout-row order was silently ignored.
+    RT_SLOTS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 119, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 103, 117,
+                32, 33, 34, 122, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 67, 118, 50, 51, 52, 123, 55, 56, 57,
+                58, 59, 60, 61, 62, 63, 64, 65, 66, 85, 121, 68, 69, 70, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84,
+                101, 86, 87, 88, 106, 91, 92, 93, 94, 96, 98, 99, 100, 102, 104, 105)
+
     def realtime_frame(self, h, colors, default=(0, 0, 0)):
         """Send one frame on an open handle `h`. colors: {light_index: (r, g, b)}."""
-        import keys as _keys
         ent = bytearray()
-        for k in sorted(_keys.KEYS, key=lambda k: (k[4], k[5])):
-            li = k[3]
+        for li in self.RT_SLOTS:
             r, g, b = colors.get(li, default)
             ent += bytes([li, r, g, b])
         ent += bytes(512 - len(ent))
-        for p in [bytes([0x04, 0x20, 0, 0, 0, 0, 0, 0, 8])] + [bytes(ent[i:i + 64]) for i in range(0, 512, 64)]:
-            buf = bytes([0]) + p.ljust(64, b'\0')
-            if not hid.HidD_SetFeature(h, buf, 65):
+        def send(p):
+            if not hid.HidD_SetFeature(h, bytes([0]) + p.ljust(64, b'\0'), 65):
                 raise OSError('SetFeature failed (%d)' % ctypes.get_last_error())
+
+        def wait_ready(timeout=0.5):
+            # the keyboard answers 04 xx 00 01 when it is ready and 00 / FF while busy; frames sent while busy are dropped
+            end = time.time() + timeout
+            time.sleep(0.006)           # the official app reads the status ~6 ms after each write, never earlier
+            while True:
+                rd = ctypes.create_string_buffer(65)
+                hid.HidD_GetFeature(h, rd, 65)
+                if rd.raw[4] == 0x01 or time.time() > end:
+                    return
+                time.sleep(0.01)
+
+        send(bytes([0x04, 0x20, 0, 0, 0, 0, 0, 0, 8]))
+        wait_ready()
+        for i in range(0, 512, 64):
+            send(bytes(ent[i:i + 64]))
+        send(bytes([0x04, 0x02]))
+        wait_ready()
 
     def stream_realtime(self, frame_fn, seconds, fps=20):
         """Call frame_fn(t) -> {light_index: (r,g,b)} for `seconds` seconds at about `fps` frames/s."""
