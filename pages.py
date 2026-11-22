@@ -10,6 +10,7 @@ from tkinter import colorchooser, filedialog, messagebox, ttk
 
 import ak980
 import keys
+import layout
 import theme
 from keyboard_view import DUAL, KeyboardView
 from theme import C, Btn, Card, Chip, Seg, Slider, Toggle, label, listbox
@@ -30,7 +31,7 @@ PRETTY = {'Shift_L': 'Left Shift', 'Shift_R': 'Right Shift', 'Ctrl_L': 'Left Ctr
           'Alt_L': 'Left Alt', 'del': 'Delete', 'home': 'Home', 'page up': 'Page Up', 'page down': 'Page Down', 'CapsLock': 'Caps Lock',
           'Backspace': 'Backspace', 'Num': 'Num Lock', '//': '/'}
 MOD_NAMES = {'LCtrl': 'Left Ctrl', 'LShift': 'Left Shift', 'LAlt': 'Left Alt', 'LWin': 'Left Win', 'RCtrl': 'Right Ctrl',
-             'RShift': 'Right Shift', 'RAlt': 'Right Alt', 'RWin': 'Right Win'}
+             'RShift': 'Right Shift', 'RAlt': 'AltGr', 'RWin': 'Right Win'}
 
 
 def key_label(name, col, row):
@@ -416,12 +417,10 @@ class KeysPage(Page):
             self.names[lab] = (idx, code)
             self.by_li[li] = (idx, lab)
             self.usage_label.setdefault(code, lab)
-            if n in DUAL:
-                self.chars[code] = DUAL[n]
-            elif len(n) == 1 and n.isalpha():
-                self.chars[code] = (n.lower(), n.upper())
-            elif col >= 15 and len(lab) == 8 and lab[-1] in '0123456789':     # 'Numpad 7'
+            if col >= 15 and len(lab) == 8 and lab[-1] in '0123456789':     # 'Numpad 7'
                 self.chars[code] = (lab[-1], '')
+        self.char_entries, self.extra_keys, self.layout_name = {}, {}, ''
+        self._refresh_layout()
         self.idx2li = {v[0]: li for li, v in self.by_li.items()}
         self.maps = {'top': {}, 'fn': {}}
         raw = load_json(KEYMAP_FILE, {})
@@ -437,6 +436,8 @@ class KeysPage(Page):
         head.pack(fill='x')
         Seg(head, ('Normal layer', 'Fn layer'), self.layer, self._layer_changed, width=130).pack(side='left')
         label(head, 'The Fn layer is what the keys do while Fn is held (or toggled).', 10, False, C['muted']).pack(side='left', padx=14)
+        self.layout_label = label(self, '', 9, False, C['muted'])
+        self.layout_label.pack(anchor='w', pady=(6, 0))
         card = Card(self)
         card.pack(fill='x', pady=12)
         self.kv = KeyboardView(card.body, unit=44, on_press=self.select)
@@ -464,14 +465,14 @@ class KeysPage(Page):
         row.pack(fill='x')
         label(row, 'Make it', 10, False, C['muted'], C['card']).pack(side='left', padx=(0, 10))
         Seg(row, ('Key', 'Media', 'Macro', 'Modifiers'), self.kind, self._kind_changed, width=96).pack(side='left')
-        self.target = ttk.Combobox(row, state='readonly', width=24)
+        self.target = ttk.Combobox(row, state='readonly', width=24, height=18)
         self.target.pack(side='left', padx=14)
         self.target_hint = label(row, '', 10, False, C['muted'], C['card'])
         mods = tk.Frame(b, bg=C['card'])
         mods.pack(fill='x', pady=(10, 0))
         label(mods, 'With modifiers', 10, False, C['muted'], C['card']).pack(side='left', padx=(0, 10))
         for m in MODS:
-            Toggle(mods, m, self.mod_vars[m], command=self._preview).pack(side='left', padx=(0, 12))
+            Toggle(mods, MOD_NAMES[m], self.mod_vars[m], command=self._preview).pack(side='left', padx=(0, 12))
         self.target.bind('<<ComboboxSelected>>', lambda e: self._preview())
         box = tk.Frame(b, bg=C['card2'], highlightthickness=1, highlightbackground=C['line'])
         box.pack(fill='x', pady=(14, 0))
@@ -494,7 +495,7 @@ class KeysPage(Page):
 
     def _kind_changed(self):
         k = self.kind.get()
-        vals = list(MEDIA) if k == 'Media' else [m['name'] for m in self.app.macros] if k == 'Macro' else list(self.names)
+        vals = list(MEDIA) if k == 'Media' else [m['name'] for m in self.app.macros] if k == 'Macro' else list(self.names) + list(self.extra_keys) + list(self.char_entries)
         self.target.configure(values=vals, state='disabled' if k == 'Modifiers' else 'readonly')
         self.target.set('')
         self._preview()
@@ -505,7 +506,10 @@ class KeysPage(Page):
             self.target_hint.pack_forget()
 
     def on_show(self):
+        self._refresh_layout()
         self._kind_changed()
+        if self.sel is not None:
+            self.select(self.sel)
 
     def _layer_changed(self):
         self._badges()
@@ -514,12 +518,48 @@ class KeysPage(Page):
     def _badges(self):
         self.kv.set_badges({self.idx2li[i] for i in self.map if i in self.idx2li})
 
+    def typed(self, u, shift=False, altgr=False):
+        """(text, dead) that key usage u types with Shift/AltGr on the active Windows layout (number-pad digits are layout independent)."""
+        if u in self.chars:
+            return self.chars[u][0], False
+        return layout.char(u, shift, altgr)
+
+    def _refresh_layout(self):
+        """Rebuild the character list for the Windows keyboard layout that is active now."""
+        self.layout_name = layout.name()
+        self.extra_keys = {}
+        for u, nm in ((layout.ISO_KEY, 'ISO key'), (layout.NON_US_HASH, 'Hash key')):
+            c, sc = layout.char(u), layout.char(u, True)
+            if c and (u == layout.ISO_KEY or u not in self.usage_label):
+                lab = '%s  (%s  %s)' % (nm, c[0], sc[0] if sc else '')
+                self.extra_keys[lab] = u
+                self.usage_label[u] = nm
+        self.char_entries = {}                       # label -> (usage, shift, altgr)
+        seen = set()
+        for u in layout.SC:
+            plain = layout.char(u)
+            if plain:
+                seen.add(plain[0])
+        found = []
+        for u in layout.SC:
+            for shift, altgr, how in ((True, False, 'Shift'), (False, True, 'AltGr'), (True, True, 'Shift + AltGr')):
+                r = layout.char(u, shift, altgr)
+                if r and r[0] not in seen:
+                    seen.add(r[0])
+                    found.append((r[0].isalpha(), altgr, shift, u, r, how))
+        for _, _, _, u, (t, dead), how in sorted(found, key=lambda f: (f[0], f[1], f[2], f[3])):
+            keyname = self.usage_label.get(u, 'key %d' % u)
+            lab = '%s     (%s + %s)' % (t + (' dead accent' if dead else ''), how, keyname)
+            self.char_entries[lab] = (u, 'Shift' in how, 'AltGr' in how)
+        if hasattr(self, 'layout_label'):
+            self.layout_label.configure(text='Windows layout: %s. The characters listed are what YOUR layout types.' % self.layout_name)
+
     def select(self, li):
         self.sel = li
         self.kv.set_marked({li})
         idx, lab = self.by_li[li]
-        dual = self.chars.get(self.names[lab][1])
-        self.sel_label.configure(text=lab + ('   (with Shift: %s)' % dual[1] if dual and dual[1] and not lab.startswith('Numpad') else ''))
+        d = self.typed(self.names[lab][1])
+        self.sel_label.configure(text=lab + ('   (types %s on your layout)' % d[0] if d and d[0] != lab else ''))
         e = self.map.get(idx)
         self.cur_label.configure(text=('Saved: ' + self.describe(e)[1]) if e else 'Saved: default function (not remapped)')
         self._load(e)
@@ -529,8 +569,8 @@ class KeysPage(Page):
         """(result text, explanation) for a mapping entry, or for the key's own default when e is None."""
         if e is None:
             u = self.names[lab][1] if lab else 0
-            ch = self.chars.get(u)
-            return (ch[0] if ch else (lab or '')), 'Default: the key does what its label says.'
+            d = self.typed(u)
+            return (d[0] if d else (lab or '')), 'Default: what this key does on your layout.'
         t = e['t']
         if t == 6:
             return 'macro "%s"' % e.get('macro', ''), 'Runs the macro "%s" (text typed on the Macros page).' % e.get('macro', '')
@@ -542,14 +582,17 @@ class KeysPage(Page):
         if u == 0:
             return ' + '.join(mnames) + ' held', 'Acts as %s.' % ' + '.join(mnames)
         shift = any(m in ('LShift', 'RShift') for m in mods)
-        others = [m for m in mods if m not in ('LShift', 'RShift')]
-        ch = self.chars.get(u)
+        altgr = 'RAlt' in mods
+        others = [m for m in mods if m not in ('LShift', 'RShift', 'RAlt')]
         name = self.usage_label.get(u, 'key %d' % u)
-        if ch and not others:
-            out = ch[1] if shift and ch[1] else ch[0]
-            how = ' + '.join(mnames + [name])
-            return out, ('Sends %s, so the computer types "%s".' % (how, out)) if mods else 'Sends the plain key "%s".' % out
+        r = None if others else self.typed(u, shift, altgr)
         combo = ' + '.join(mnames + [name])
+        if r:
+            out = r[0]
+            if not mods:
+                return out, 'Sends the plain key; on your layout it types "%s".' % out
+            note = ' It is a dead accent: it combines with the next letter you type.' if r[1] else ''
+            return out, 'Sends %s, so your layout types "%s".%s' % (combo, out, note)
         return combo, 'Sends the shortcut %s.' % combo
 
     def _entry(self):
@@ -561,6 +604,13 @@ class KeysPage(Page):
         if k == 'Key':
             if not t:
                 return None
+            if t in self.extra_keys:
+                return {'t': 2, 'a': mask, 'b': self.extra_keys[t], 'desc': (names + '+' if mask else '') + t}
+            if t in self.char_entries:                      # a character that needs Shift and/or AltGr on this layout
+                code, sh, ag = self.char_entries[t]
+                mask |= (ak980.Keyboard.MOD['LShift'] if sh else 0) | (ak980.Keyboard.MOD['RAlt'] if ag else 0)
+                shown = '+'.join(m for m in MODS if mask & ak980.Keyboard.MOD[m])
+                return {'t': 2, 'a': mask, 'b': code, 'desc': shown + '+' + self.usage_label[code]}
             return {'t': 2, 'a': mask, 'b': self.names[t][1], 'desc': (names + '+' if mask else '') + t}
         if k == 'Macro':
             return {'t': 6, 'a': 0, 'b': 0, 'macro': t, 'desc': 'Macro: ' + t} if t else None
@@ -615,6 +665,15 @@ class KeysPage(Page):
                     self._kind_changed()
                 else:
                     self.target.set(self.usage_label.get(e['b'], ''))
+                    msk = ak980.Keyboard.MOD['LShift'] | ak980.Keyboard.MOD['RAlt']
+                    sh, ag = bool(e['a'] & ak980.Keyboard.MOD['LShift']), bool(e['a'] & ak980.Keyboard.MOD['RAlt'])
+                    if (sh or ag) and not e['a'] & ~msk:
+                        for lab, (code, s2, a2) in self.char_entries.items():          # show Shift/AltGr + key as the character itself
+                            if code == e['b'] and s2 == sh and a2 == ag:
+                                self.target.set(lab)
+                                self.mod_vars['LShift'].set(False)
+                                self.mod_vars['RAlt'].set(False)
+                                break
         self.mod_refresh()
         self._preview()
 
