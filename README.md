@@ -54,7 +54,7 @@ Use as a library: `import ak980; kb = ak980.Keyboard(); kb.set_lighting('Spectru
   see docs/PROTOCOL.md) but on the tested keyboard even the official app's Real-time page only produced black frames, and
   streaming frames from here did not light the keyboard.
 * The Fn Momentary/Toggle switch is implemented from a capture but was not yet checked by pressing Fn on the keyboard.
-* Not implemented: mouse-button key functions, multiple profiles, the screen frame editor,
+* Not implemented: multiple profiles, the screen frame editor,
   firmware update, Reset / Factory Reset (deliberately).
 * Writes take time: a per-key / macro / keymap update needs a few seconds; a screen upload with many frames can take minutes.
 

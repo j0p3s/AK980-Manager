@@ -46,6 +46,8 @@ All multi-packet tables end with the two bytes `AA 55`.
   Ctrl_R=98), table ends with `AA 55` at bytes 574-575. Always write the **whole** table; an all-zero entry = default key.
 * Entries: keyboard key `[02, modifier_mask, hid_usage, 0]` (modifier-only: usage 0), media/consumer key
   `[03, usage_lo, usage_hi, 0]` (Volume Up = `0x00E9`), macro `[06, macro_number, 0, 0]`.
+* Mouse function `[01, class, value, 0]` (captured 2026-11-22, verified on hardware): class 1 = button bits (Left `01`, Right `02`, Middle `04`,
+  Double Click `03`, Button 4/Back `08`, Button 5/Forward `10`), class 3 = wheel (Scroll Up `01`, Scroll Down `ff`).
 * Modifier mask: LCtrl 01, LShift 02, LAlt 04, LWin 08, RCtrl 10, RShift 20, RAlt 40, RWin 80.
 
 ### Per-key lighting — header `04 23 …09`, then 9 packets = 576 bytes
@@ -114,7 +116,7 @@ Code: `Keyboard.realtime_frame`, `Keyboard.stream_realtime`.
 ## Other features seen in the official app's strings but not implemented
 
 Key response levels 1-5 (the app's text: about 2-3 / 5-6 / 8-9 / 13-14 / 17-18 ms wired; only 2 and 3 were captured),
-mouse-button key functions (Mouse Button 1-5), three "exclusive configs" and saved
+three "exclusive configs" and saved
 lighting schemes with import/export, the TFT frame editor and GIF export.
 
 ## Not decoded / not covered

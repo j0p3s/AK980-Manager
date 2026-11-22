@@ -111,12 +111,17 @@ class Keyboard:
     # offset 4*key_index (see keys.py), ending with aa 55. An all-zero entry means "default".
     #   keyboard key : [0x02, modifier_mask, hid_usage, 0]   (modifier-only: usage 0)
     #   media key    : [0x03, usage_lo, usage_hi, 0]         (e.g. Volume Up = 0x00E9)
+    #   mouse        : [0x01, class, value, 0]               (class 1 = button bit, 3 = wheel; see MOUSE in pages.py)
     MOD = {'LCtrl': 0x01, 'LShift': 0x02, 'LAlt': 0x04, 'LWin': 0x08,
            'RCtrl': 0x10, 'RShift': 0x20, 'RAlt': 0x40, 'RWin': 0x80}
 
     @staticmethod
     def key_entry(usage, mods=0):
         return (0x02, mods, usage)
+
+    @staticmethod
+    def mouse_entry(cls, value):
+        return (0x01, cls, value)
 
     @staticmethod
     def media_entry(usage):

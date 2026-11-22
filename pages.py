@@ -23,6 +23,11 @@ LIGHT_FILE = os.path.join(DATA, 'lighting.json')
 
 MEDIA = {'Volume Up': 0xE9, 'Volume Down': 0xEA, 'Mute': 0xE2, 'Play/Pause': 0xCD, 'Next Track': 0xB5,
          'Previous Track': 0xB6, 'Stop': 0xB7, 'Calculator': 0x192, 'Mail': 0x18A, 'Browser Home': 0x223}
+# Mouse functions as the official app writes them: entry [01, class, value, 00] (captured 2026-11-22).
+# class 1 = button bits (HID order: 1 left, 2 right, 4 middle, 8 button 4 = Back, 0x10 button 5 = Forward; 3 = Double Click),
+# class 3 = wheel, value 01 = up / ff = down.
+MOUSE = {'Left Click': (1, 0x01), 'Right Click': (1, 0x02), 'Middle Click': (1, 0x04), 'Double Click': (1, 0x03),
+         'Mouse Button 4 (Back)': (1, 0x08), 'Mouse Button 5 (Forward)': (1, 0x10), 'Scroll Up': (3, 0x01), 'Scroll Down': (3, 0xFF)}
 MODS = ['LCtrl', 'LShift', 'LAlt', 'LWin', 'RCtrl', 'RShift', 'RAlt', 'RWin']
 CHAR_USAGE = {c: 4 + i for i, c in enumerate('abcdefghijklmnopqrstuvwxyz')}
 CHAR_USAGE.update({c: 30 + i for i, c in enumerate('123456789')})
@@ -464,7 +469,7 @@ class KeysPage(Page):
         row = tk.Frame(b, bg=C['card'])
         row.pack(fill='x')
         label(row, 'Make it', 10, False, C['muted'], C['card']).pack(side='left', padx=(0, 10))
-        Seg(row, ('Key', 'Media', 'Macro', 'Modifiers'), self.kind, self._kind_changed, width=96).pack(side='left')
+        Seg(row, ('Key', 'Media', 'Mouse', 'Macro', 'Modifiers'), self.kind, self._kind_changed, width=92).pack(side='left')
         self.target = ttk.Combobox(row, state='readonly', width=24, height=18)
         self.target.pack(side='left', padx=14)
         self.target_hint = label(row, '', 10, False, C['muted'], C['card'])
@@ -482,7 +487,8 @@ class KeysPage(Page):
         label(line, 'Pressing', 10, False, C['muted'], C['card2']).pack(side='left')
         self.res_from = label(line, '', 15, True, C['text'], C['card2'])
         self.res_from.pack(side='left', padx=10)
-        label(line, 'types', 10, False, C['muted'], C['card2']).pack(side='left')
+        self.res_mid = label(line, 'types', 10, False, C['muted'], C['card2'])
+        self.res_mid.pack(side='left')
         self.res_to = label(line, '', 15, True, C['accent_h'], C['card2'])
         self.res_to.pack(side='left', padx=10)
         self.res_note = label(box, '', 9, False, C['muted'], C['card2'], justify='left', wraplength=900)
@@ -495,7 +501,7 @@ class KeysPage(Page):
 
     def _kind_changed(self):
         k = self.kind.get()
-        vals = list(MEDIA) if k == 'Media' else [m['name'] for m in self.app.macros] if k == 'Macro' else list(self.names) + list(self.extra_keys) + list(self.char_entries)
+        vals = list(MEDIA) if k == 'Media' else list(MOUSE) if k == 'Mouse' else [m['name'] for m in self.app.macros] if k == 'Macro' else list(self.names) + list(self.extra_keys) + list(self.char_entries)
         self.target.configure(values=vals, state='disabled' if k == 'Modifiers' else 'readonly')
         self.target.set('')
         self._preview()
@@ -576,6 +582,8 @@ class KeysPage(Page):
             return 'macro "%s"' % e.get('macro', ''), 'Runs the macro "%s" (text typed on the Macros page).' % e.get('macro', '')
         if t == 3:
             return e['desc'], 'Media function: %s.' % e['desc']
+        if t == 1:
+            return e['desc'], 'The key acts as the mouse: %s.' % e['desc']
         mask, u = e['a'], e['b']
         mods = [m for m in MODS if mask & ak980.Keyboard.MOD[m]]
         mnames = [MOD_NAMES[m] for m in mods]
@@ -619,6 +627,8 @@ class KeysPage(Page):
                 return None
             u = MEDIA[t]
             return {'t': 3, 'a': u & 0xFF, 'b': u >> 8, 'desc': t}
+        if k == 'Mouse':
+            return {'t': 1, 'a': MOUSE[t][0], 'b': MOUSE[t][1], 'desc': t} if t else None
         return {'t': 2, 'a': mask, 'b': 0, 'desc': names} if mask else None
 
     def _preview(self):
@@ -631,6 +641,8 @@ class KeysPage(Page):
         idx, lab = self.by_li[self.sel]
         self.res_from.configure(text=lab)
         e = self._entry()
+        shown = e if e is not None else self.map.get(idx)
+        self.res_mid.configure(text='types' if shown is None or shown['t'] == 2 else 'does')
         if e is None:
             saved = self.map.get(idx)
             out, why = self.describe(saved, lab)
@@ -653,6 +665,10 @@ class KeysPage(Page):
                 self.kind.set('Macro')
                 self._kind_changed()
                 self.target.set(e.get('macro', ''))
+            elif e['t'] == 1:
+                self.kind.set('Mouse')
+                self._kind_changed()
+                self.target.set(e['desc'])
             elif e['t'] == 3:
                 self.kind.set('Media')
                 self._kind_changed()

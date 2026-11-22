@@ -86,11 +86,11 @@ unpacked vendor installer. It is in `.gitignore` on purpose; do not publish it.
 7-Zip, innoextract, USBPcap (driver + needs reboot to capture), Wireshark, and `pip install frida frida-tools`.
 
 ## Open work / ideas
-0. Mouse-button key functions (Mouse Button 1-5 in the official key menu) — not captured yet.
+0. DONE (v1.0.5 work): mouse-button key functions (captured with Frida, see docs/PROTOCOL.md; `research/logs/mouse.log`, `analyze_mouse.py`), verified on hardware.
 1. Macros: mouse events, repeat count, modifier events (capital letters, symbols) — capture the app recording Shift+A and a click.
 2. **Real-time Lighting** (SOLVED 2026-11-22, see docs/PROTOCOL.md): frames need the fixed slot order, a `04 02` packet and a status read (wait for `01`) after the header and after `04 02`. `tools/keypress_glow.py` (pressed keys light up and fade) works, verified on hardware. `tools/music_rhythm.py` (equalizer on the keys from the PC audio via WASAPI loopback, `soundcard` + numpy; `--mode pulse` = whole-keyboard bass flash, not yet eyeballed) works, verified on hardware (bars mode). Both are in the GUI's Reactive tab (done 2026-11-22; verified: modes start/stop, preview, no UI errors; the equalizer's audio thread COM fix is verified only for "no error" - hear it with music playing).
 2b. From the app's English strings (`research/ak980_extract/en_strings.txt`): key response levels 1-5, Fn Momentary/Toggle,
-   mouse-button key functions, 3 exclusive configs, lighting-scheme import/export, TFT frame editor + GIF export.
+   3 exclusive configs, lighting-scheme import/export, TFT frame editor + GIF export.
 3. Verify the remaining effect ids, "LED Off", direction byte, key response level 1, and the clock on the screen by eye.
 4. 2.4G dongle (`0C45:FEFE`, interface MI_03) and Bluetooth modes.
 5. Polish: profiles (the app has 3 "exclusive configs"), import/export, a proper installer or PyInstaller build, tests for the table builders.
