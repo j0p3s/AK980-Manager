@@ -155,7 +155,10 @@ def self_update(progress=None, force=False):
                 rel = n[len(root):]
                 d = os.path.dirname(rel)
                 if rel and not n.endswith('/') and d in UPDATE_DIRS and rel.lower().endswith(UPDATE_EXT) and '..' not in rel:
-                    files[rel] = z.read(n)
+                    blob = z.read(n)
+                    if rel.lower().endswith(('.bat', '.cmd')):      # cmd.exe needs CRLF line endings (the zip has LF)
+                        blob = blob.replace(b'\r\n', b'\n').replace(b'\n', b'\r\n')
+                    files[rel] = blob
         if 'ak980.py' not in files or 'ak980_gui.py' not in files:
             raise ValueError('archive does not look like AK980 Manager')
         # every Python file must at least compile before anything is replaced

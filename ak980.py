@@ -219,13 +219,13 @@ class Keyboard:
         send(bytes([0x04, 0x02]))
         wait_ready()
 
-    def stream_realtime(self, frame_fn, seconds, fps=20):
-        """Call frame_fn(t) -> {light_index: (r,g,b)} for `seconds` seconds at about `fps` frames/s."""
+    def stream_realtime(self, frame_fn, seconds, fps=20, stop=None):
+        """Call frame_fn(t) -> {light_index: (r,g,b)} for `seconds` seconds at about `fps` frames/s (stop: threading.Event)."""
         with self.lock:
             h = self._open()
             try:
                 t0 = time.time()
-                while time.time() - t0 < seconds:
+                while time.time() - t0 < seconds and not (stop and stop.is_set()):
                     t = time.time() - t0
                     self.realtime_frame(h, frame_fn(t))
                     time.sleep(max(0.0, 1.0 / fps - (time.time() - t0 - t)))
