@@ -16,6 +16,10 @@ import threading
 import time
 import warnings
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import bootstrap
+bootstrap.ensure_dependencies(print)      # installs numpy + soundcard on first use
+
 import numpy as np
 
 warnings.filterwarnings('ignore', message='data discontinuity in recording')   # harmless loopback buffer notices

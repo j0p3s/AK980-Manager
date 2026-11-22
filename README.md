@@ -20,10 +20,13 @@ Windows, Python 3.10+ (Tkinter), Pillow. Licensed under the **GNU GPL v3 or late
 
 ## Install and run
 
-```powershell
-pip install -r requirements.txt
-python ak980_gui.py          # or double-click "AK980 Manager.pyw"
-```
+Double-click **`Start AK980 Manager.bat`**. That is all: on the first run it installs Python 3.12 if the PC has none (via winget),
+and the program then installs the packages it needs (Pillow, numpy, soundcard) by itself, with a small "Setting up" window.
+Afterwards it keeps itself up to date without asking: about every 6 hours it checks GitHub for a newer version (downloaded,
+syntax-checked, swapped in, rolled back if anything fails) and about once a week it upgrades its packages. Your settings live in
+`%APPDATA%\AK980Manager` and are never touched by an update; everything is logged to `%APPDATA%\AK980Manager\bootstrap.log`.
+Offline is fine (it tries again next start). Updates are skipped in a git checkout (a developer copy) or when the environment
+variable `AK980_NO_UPDATE` is set. Doing it by hand: `pip install -r requirements.txt`, then `python ak980_gui.py`.
 
 1. Plug the keyboard in with the **USB cable** (wired mode) and set it to USB mode.
 2. **Close the official AJAZZ app first** (also its tray icon). It polls the keyboard about 12 times a second, which breaks

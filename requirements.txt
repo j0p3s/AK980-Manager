@@ -1,6 +1,6 @@
 pillow>=10
 # optional, only for tools/frida_hid_logger.py (reverse engineering):
 # frida>=17
-# optional, only for tools/music_rhythm.py (Music Rhythm equalizer on the keys):
-# soundcard>=0.4.6
-# numpy>=1.26
+# Music Rhythm (tools/music_rhythm.py); the program installs these itself on first run:
+soundcard>=0.4.6
+numpy>=1.26

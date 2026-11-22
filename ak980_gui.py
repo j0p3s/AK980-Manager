@@ -7,7 +7,7 @@
 # without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
 # Public License (LICENSE) for more details. Not affiliated with or endorsed by AJAZZ.
 """AK980 Manager - lighting control (English UI). Close the official AJAZZ app first."""
-import html, json, os, subprocess, threading, tkinter as tk
+import html, json, os, subprocess, sys, threading, tkinter as tk
 from tkinter import ttk, colorchooser, messagebox, filedialog
 import ak980, keys
 
@@ -587,4 +587,8 @@ class App(tk.Tk):
 
 
 if __name__ == '__main__':
+    import bootstrap
+    if bootstrap.run_startup() == 'updated':      # new program files were downloaded: start again so they are the ones running
+        subprocess.Popen([sys.executable] + sys.argv)
+        sys.exit(0)
     App().mainloop()

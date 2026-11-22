@@ -12,6 +12,9 @@ import os, sys
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.getcwd())
 
+import bootstrap
+bootstrap.run_startup()          # first run: installs what is missing; afterwards: keeps the program and its packages up to date
+
 import ak980_gui
 
 ak980_gui.App().mainloop()
