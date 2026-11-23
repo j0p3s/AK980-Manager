@@ -19,7 +19,7 @@ DATA = os.path.join(os.environ.get('APPDATA', '.'), 'AK980Manager')
 STATE = os.path.join(DATA, 'live.json')
 USER_GIF = os.path.join(DATA, 'screen_user.gif')            # the user's own screen picture, saved when they upload it (put back later)
 W, H = 240, 135
-PLANS = {'Saver': (8, 3), 'Balanced': (24, 6), 'Heavy': (48, 8)}       # (uploads a day, uploads back to back)
+PLANS = {'Saver': (8, 3), 'Balanced': (24, 6), 'Heavy': (48, 8), 'Burst': (96, 8)}       # (uploads a day, uploads back to back)
 DATE_FORMATS = {'DD/MM/YYYY': '%d/%m/%Y', 'MM/DD/YYYY': '%m/%d/%Y', 'YYYY-MM-DD': '%Y-%m-%d', 'DD.MM.YYYY': '%d.%m.%Y'}
 PRIORITY = {'clock': 1, 'focus': 2, 'nowplaying': 2, 'calendar': 3, 'reminder': 4}
 NO_WINDOW = 0x08000000
@@ -453,7 +453,7 @@ class Worker(threading.Thread):
             ev = next_event(parse_ics(load_ics(self.s['ics'])), dt)
             if ev:
                 self.offer('calendar:%s' % ev[0], meeting_card(ev[1], ev[0], dt), temporary=True)
-        if src.get('nowplaying') and due('nowplaying', 8):
+        if src.get('nowplaying') and due('nowplaying', 15):
             np_ = nowplaying()
             if np_ and np_[2] == 'Playing':
                 self.offer('nowplaying', song_card(*np_))

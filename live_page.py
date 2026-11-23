@@ -42,7 +42,7 @@ class LivePage(Page):
         Seg(row, list(live.PLANS), self.plan, self._plan).pack(side='left')
         self.state = label(top.body, '', 10, False, C['muted'], C['card'], justify='left', wraplength=760)
         self.state.pack(anchor='w', pady=(10, 0))
-        label(top.body, 'Every screen upload erases flash memory, so automatic uploads are limited (Saver 8 a day, Balanced 24, Heavy 48) '
+        label(top.body, 'Every screen upload erases flash memory, so automatic uploads are limited (Saver 8 a day, Balanced 24, Heavy 48, Burst 96) '
               'and need the USB cable. A card that cannot go now waits. Your own picture (uploaded on the Screen page) is put back after '
               'reminders, meetings and the focus end.', 9, False, C['muted'], C['card'], wraplength=760, justify='left').pack(anchor='w', pady=(6, 0))
 
