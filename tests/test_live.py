@@ -1,3 +1,5 @@
+# Ajazz AK980 V2 Manager - control software for the AJAZZ AK980 (V2) PRO keyboard
+# Copyright (C) 2026 j0p3s. GPL-3.0-or-later (see LICENSE). Not affiliated with or endorsed by AJAZZ.
 import datetime
 import os
 import sys

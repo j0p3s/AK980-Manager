@@ -1,11 +1,12 @@
 # Ajazz AK980 V2 Manager
 
 An English, open-source replacement for the Chinese-only software of the **AJAZZ AK980 (V2) PRO** keyboard
-(USB `0C45:8009`). Written by reverse engineering the official app's USB/HID traffic — see [docs/PROTOCOL.md](docs/PROTOCOL.md).
+(USB `0C45:8009`, and the newer **"LED v2 Firmware 769"** units, USB `0C45:8039`, over the cable). Written by reverse engineering the official app's USB/HID traffic — see [docs/PROTOCOL.md](docs/PROTOCOL.md).
 Windows, Python 3.10+ (Tkinter), Pillow. Licensed under the **GNU GPL v3 or later**. Not affiliated with AJAZZ.
 
 > **Use at your own risk.** This talks to your keyboard directly. It only sends the lighting, key map, macro, screen and
-> settings commands the official app also sends; it has no firmware update and no factory reset. Still, it is unofficial.
+> settings commands the official app also sends; it has no firmware update. The one reset it offers (Screen page, *Restore factory screen*,
+> the same as Fn + Space) asks first and also clears key remaps, macros and lighting. Still, it is unofficial.
 
 ## Features
 
@@ -16,10 +17,23 @@ Windows, Python 3.10+ (Tkinter), Pillow. Licensed under the **GNU GPL v3 or late
 | **Reactive** | keys that glow when pressed; Music Rhythm equalizer (bar colours, background, amplitude over 2.4G), bass pulse, system gauges (CPU on the top row, memory on the number row) and a focus timer on the number row (cable only) |
 | **Keys** | remap keys on the **Top** and **Fn** layer to a key, characters of your Windows layout, media, mouse, macro, special function (Show Desktop, Copy, Paste...), PC action (open program / website / file, send text) or key sequence |
 | **Macros** | record keys and mouse clicks, type text, edit the steps (waits, speed), duplicate, import / export; assign on the Keys page |
-| **Screen** | frame editor, GIF import / export and video import (needs ffmpeg) for the TFT screen (240x135, up to 140 frames); sync the clock |
-| **Live screen** | cards that put themselves on the screen within an upload budget: song playing, next meeting (.ics / calendar link), reminders, focus timer, clock and date in your date format (USB cable) |
+| **Screen** | frame editor, GIF import / export and video import (needs ffmpeg) for the TFT screen (240x135, up to 140 frames); sync the clock; *Restore factory screen* brings back the firmware's own clock page on firmware 769 (full keyboard reset, asks first) |
+| **Live screen** | cards that put themselves on the screen within an upload budget: song playing, next meeting (.ics / calendar link), reminders, focus timer, clock and date in your date format (USB cable). Upload plans Saver / Balanced / Heavy / Burst (8 / 24 / 48 / 96 uploads a day) protect the screen's flash memory |
 | **Profiles** | save keymap, macros and lighting under a name and switch with one click |
-| **System** | sleep time, key response level, Fn key Momentary / Toggle, sync the keyboard clock, Bluetooth battery level (read-only), back up / restore everything in one file, start with Windows, tray, update notice |
+| **System** | sleep time, key response level, Fn key Momentary / Toggle, sync the keyboard clock, Bluetooth battery level (read-only), back up / restore everything in one file, start with Windows, tray, update notice, **Debug log** (records every packet, action and error to `Logs\debug.log` next to the program, with a button to save it to a file for bug reports) |
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Overview](docs/screenshots/01-overview.png) | ![Lighting](docs/screenshots/02-lighting.png) |
+| ![Per-key colours](docs/screenshots/03-per-key.png) | ![Reactive](docs/screenshots/04-reactive.png) |
+| ![Key remapping](docs/screenshots/05-keys.png) | ![Macros](docs/screenshots/06-macros.png) |
+| ![Screen](docs/screenshots/07-screen.png) | ![Live screen](docs/screenshots/08-live-screen.png) |
+| ![Profiles](docs/screenshots/09-profiles.png) | ![Connection](docs/screenshots/10-connection.png) |
+| ![System](docs/screenshots/11-system.png) | |
+
+Regenerate them with `python tools/screenshots.py` (close the running program first).
 
 ## Install and run
 
@@ -52,9 +66,9 @@ Use as a library: `import ak980; kb = ak980.Keyboard(); kb.set_lighting('Spectru
 * Over the 2.4G dongle the screen editor, key glow and Bass pulse are not available (the official app does not offer them there either); Bluetooth is not supported.
 * Macros: text is typed the way your Windows layout types it; recorded macros replay the exact keys and clicks (mouse movement is not recorded). The keyboard holds about 2700 bytes of macros (8 bytes per step); the page shows how much is used. PC actions work while the manager is running.
 * Real-time lighting over the cable (key glow, bass pulse) is implemented from captures; Music Rhythm "Bars" over 2.4G uses the keyboard's own equaliser.
-* Key response level 1 and the keyboard clock's effect on the screen time were not checked by eye.
+* Firmware 769 (cable only, USB `0C45:8039`): everything above works, tested on hardware, with these differences: the keyboard cannot report its colours back, and the screen shows a clock only through a Live screen clock card (the firmware's own clock page returns only after a full reset, which is what *Restore factory screen* does). Bluetooth and the 2.4G dongle on that firmware are not covered.
 * Profiles are stored on the PC (Profiles page), not in the keyboard.
-* Not implemented: firmware update, Reset / Factory Reset (deliberately).
+* Not implemented: firmware update, and a general factory reset (only *Restore factory screen* on the Screen page).
 * Writes take time: a per-key / macro / keymap update needs a few seconds; a screen upload with many frames can take minutes.
 
 ## Credits
@@ -66,6 +80,7 @@ Protocol notes (macro memory size, the Fn-key rule, the clock weekday byte, the 
 
 * `ak980.py` — driver (protocol commands) · `ak980_gui.py` — Tkinter interface · `keys.py` — key/light index table
   generated from the official app's layout file
+* `debuglog.py` — the optional debug log · `tools/screenshots.py` — regenerates `docs/screenshots`
 * `tools/` — `frida_hid_logger.py` (log the official app's HID calls) and `usbpcap_capture.ps1` (USB capture helper) used for
   the reverse engineering
 * `docs/PROTOCOL.md` — the decoded protocol · `HANDOFF.md` — project state for whoever continues the work
@@ -75,7 +90,8 @@ Protocol notes (macro memory size, the Fn-key rule, the clock weekday byte, the 
 
 Open the official app, attach `tools/frida_hid_logger.py` (`pip install frida`), change **one** setting at a time, and read the
 log (`hid_log.txt`): every setting is a few 64-byte feature reports. Verify on hardware before documenting it as verified.
-Never replay Reset / Factory Reset or anything that touches firmware.
+Never replay Reset / Factory Reset (except through the app's own *Restore factory screen*) or anything that touches firmware.
+For a bug report, turn on System > Debug log, repeat the problem and attach the file from *Save log to a file...*.
 
 ## License
 

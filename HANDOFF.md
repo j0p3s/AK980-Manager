@@ -1,6 +1,6 @@
 # Handoff — AK980 Manager
 
-Last updated: 2026-11-23 (2.7.0: cable support for the 769 firmware, see the 769 notes under Open work; fourth session: Keymotion comparison implemented, releases 2.0.1 - 2.6.2 published (2.6.2: restart button for updates; 2.6.1: when only Bluetooth is connected the status line says so instead of 'not found'); v2.6.0 adds the live screen, Pomodoro/gauges (also over 2.4G, slowly), screen library, calibration, backup, full PT/FR/ES/TR translation; see item 0000 under Open work).
+Last updated: 2026-11-23 (docs, screenshots and licence headers refreshed; 2.7.0: cable support for the 769 firmware, see the 769 notes under Open work; fourth session: Keymotion comparison implemented, releases 2.0.1 - 2.6.2 published (2.6.2: restart button for updates; 2.6.1: when only Bluetooth is connected the status line says so instead of 'not found'); v2.6.0 adds the live screen, Pomodoro/gauges (also over 2.4G, slowly), screen library, calibration, backup, full PT/FR/ES/TR translation; see item 0000 under Open work).
 Repository: https://github.com/j0p3s/AK980-Manager · License: GPL-3.0-or-later · latest release **v2.7.1**.
 
 **Name:** the program is shown as "Ajazz AK980 V2 Manager" (window title, sidebar, tray, messages) since 2.0.3. Internal names are deliberately unchanged because the self-update, the startup task and the single-instance check depend on them: exe/folder `AK980 Manager`, zip `AK980-Manager-windows.zip`, data folder `%APPDATA%\AK980Manager`, repo `j0p3s/AK980-Manager`.

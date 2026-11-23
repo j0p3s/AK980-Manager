@@ -1,3 +1,5 @@
+# Ajazz AK980 V2 Manager - control software for the AJAZZ AK980 (V2) PRO keyboard
+# Copyright (C) 2026 j0p3s. GPL-3.0-or-later (see LICENSE). Not affiliated with or endorsed by AJAZZ.
 """Interactive check of the 2.4G Music Rhythm colours. Close the official app first (it also streams to the dongle).
 Each step streams moving bars for 4 s with one setting, then asks what you saw (Enter = as named, text = what you saw, q = quit)."""
 import math

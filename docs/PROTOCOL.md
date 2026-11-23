@@ -157,3 +157,29 @@ the firmware update path, lighting effect "LED Off".
 * Macros (verified): cmd `09` bulk, 28-byte chunks `09 1c seq`, last chunk `09 14 seq` with `aa 55` in its final two data bytes; table = wired macro table, length rule end//28 + 2 chunks (17 for one 2-key macro). Key entry type 06 via `03 04` as usual.
 * Music Rhythm (verified): `0b 1c 00 <bars> <background> <amplitude %>` (default `04 00 64`) + 19 column levels (0-6). Bars: 1 Green/Yellow/Red, 2 Rainbow, 3 Reverse Rainbow, 4 Gradient, 5 Spectrum Cycle, 6 White, 7 Red, 8 Orange, 9 Yellow, 10 Green, 11 Blue (all verified by eye 2026-11-23). Background: 0 Off, 6-11 the same colours; 1-5 and 12 are not offered by the app (they give red static / rainbow-like animations). Levels, ~30-33 frames/s, no ack; the keyboard draws the equaliser. No per-key real-time stream and no screen tab exist over the dongle in the official app.
 * Bluetooth: the official app does not support keyboard settings there, so nothing to implement.
+
+## "LED v2 Firmware 769" over the cable (USB `0C45:8039`) — verified on hardware 2026-11-23
+
+A different, simpler protocol on the same keyboard model (AJAZZ web driver, config `3141-32825-AK980 PRO`). Implemented as `KeyboardV2` in `ak980.py`.
+
+* **Interfaces:** commands on MI_02 (usage page `FF68`), 64-byte reports. MI_03 (`FF67`) carries the screen upload (4104-byte output reports) and 64-byte feature reports.
+* **Frame (64 bytes):** `AA cmd len addrLo addrHi 00 last 00 data...` — data from offset 8, at most 56 bytes per frame; byte 5 is a parameter (0 normally). The keyboard answers each frame with `55 cmd ...` (same layout). Larger blocks are sent as consecutive frames with a growing address; `last` = 1 on the final frame.
+* **Commands:**
+
+| Command (read / write) | What |
+|---|---|
+| `0x12` / `0x22` | key table, Top layer — 128 entries × 4 bytes `type b1 b2 b3` (`02 00 usage 00` = plain key); table index = position from the web driver's key list (`web_keylist.json`); 512 bytes = 10 frames |
+| `0x16` / `0x26` | key table, Fn layer (same format). Base for writing = the keyboard's default Fn matrix (`0x1C`) |
+| `0x1F` / `0x1C` | default tables (Top reads as all zeros = "default"; Fn is the real default Fn matrix) |
+| `0x13` / `0x23` | lighting effect, 16 bytes: `effect r g b 255 0 0 0 colorful brightness speed direction 0 0 AA 55`; effect `0x80` = per-key colour mode |
+| `0x24` | per-key colours: 128 entries `led r g b` (512 bytes), then `0x23` with effect `0x80` |
+| `0x15` / `0x25` | macros |
+| `0x11` / `0x21` | system settings, 56 bytes: `[2]` Fn key (0 momentary, 1 toggle), `[3]` sleep minutes (0 = never), `[4]` key response level, `[6]` system mode, `[7]` TFT display time. Write the whole block back after changing fields (read-modify-write); a system write right after a key-table write is silently ignored |
+| `0x32` | real-time colours: entries `led r g b`, 56 bytes per frame, byte 5 = parameter; ~20 frames per second worked with no errors |
+| `0x34` | clock: `5A 01 5A yy mm dd hh mm ss weekday` (weekday 0 = Sunday). Stores the time only; it does not switch the screen to a clock page |
+| `0x51` | built-in screen index (sent to MI_03 by the web driver); no visible effect here |
+| `0x0F` | reset, byte 2 = type: 1 keys, 2 lighting, 4 macros, 5 calibration, `0xFF` everything (= Fn + Space). Sent only by `factory_reset()`, never through the general write path |
+
+* **Screen upload (MI_03):** each frame header `AA 50 seq(2) total(2) 50 06` followed by 4096 bytes of RGB565 data (240×135), acknowledged by `55 41`. A single frame takes about 3 seconds; many frames take minutes. Uploading replaces the factory clock page.
+* **The factory screen** (date, time, lock icons, picture) appears only while no custom picture is stored. It comes back only after a full reset (`0x0F` type `0xFF`); the AJAZZ web driver's *Time Correction* sends exactly the `0x34` packet above and does not restore it either.
+* **Not available:** the keyboard cannot report its colours back, Bluetooth and the 2.4G dongle on this firmware are not covered.

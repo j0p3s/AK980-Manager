@@ -1,3 +1,5 @@
+# Ajazz AK980 V2 Manager - control software for the AJAZZ AK980 (V2) PRO keyboard
+# Copyright (C) 2026 j0p3s. GPL-3.0-or-later (see LICENSE). Not affiliated with or endorsed by AJAZZ.
 """Hardware check of the Copy / Paste / Cut / My Computer key functions. Close the official app first.
 Maps F9=Copy, F10=Paste, F11=Cut, F12=My Computer (top layer), opens a text box, and resets the keymap on exit.
 In the box: select the text (Ctrl+A is NOT needed, triple-click), press F11 (text disappears), F10 (text comes back),
