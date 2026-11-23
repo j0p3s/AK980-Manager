@@ -970,6 +970,21 @@ class KeyboardV2:
     def read_macro_index(self):
         return self._exchange(0x15, 400)
 
+    # --- factory reset (cmd 0x0F, type 0xFF = everything, as AJAZZ's driver sends it; the same as Fn+Space on the keyboard) -------------
+    @staticmethod
+    def reset_frame():
+        f = bytearray(64)
+        f[0], f[1], f[2] = 0xAA, 0x0F, 0xFF
+        return bytes(f)
+
+    def factory_reset(self):
+        """Resets the whole keyboard like Fn+Space: keys, macros, lighting AND the screen (back to the firmware's own clock page). The keyboard
+        restarts and answers nothing, so this only sends the frame; the caller reconnects afterwards."""
+        with self.lock:
+            n = w.DWORD()
+            if not k32.WriteFile(self._hw, bytes([0]) + self.reset_frame(), 65, ctypes.byref(n), None):
+                raise OSError('write failed (error %d)' % ctypes.get_last_error())
+
     # --- system settings (cmd 0x11 read / 0x21 write, 56 data bytes; layout from the web driver's getGameMode/setGameMode) ---------------
     # [2] Fn switch (0 momentary, 1 toggle), [3] sleep time in minutes (0 = never), [4] key response level, [6] system mode, [7] TFT display time.
     def read_system(self):

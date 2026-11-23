@@ -56,6 +56,7 @@ class ScreenPage(Page):
                           ('Library...', self.open_library)):
             Btn(top2, text, cmd, 'ghost', height=32, size=9).pack(side='left', padx=(0, 6))
         Btn(top2, 'Sync clock', self.sync, height=32, size=9).pack(side='right')
+        Btn(top2, 'Restore factory screen...', self.factory_screen, 'danger', height=32, size=9).pack(side='right', padx=6)
         Btn(top2, 'Export GIF...', self.export, height=32, size=9).pack(side='right', padx=6)
         body = tk.Frame(self, bg=C['bg'])
         body.pack(fill='both', expand=True, pady=10)
@@ -460,9 +461,23 @@ class ScreenPage(Page):
         except Exception as e:
             messagebox.showerror('Export GIF', str(e))
 
+    def factory_screen(self):
+        if not self.app.require_kb():
+            return
+        if not hasattr(self.app.kb, 'factory_reset'):
+            messagebox.showinfo('Restore factory screen', 'On this connection, press Fn + Space on the keyboard to restore the factory screen.')
+            return
+        if not messagebox.askyesno('Restore factory screen', 'This resets the whole keyboard, exactly like Fn + Space: the screen goes back to the firmware clock, '
+                                   'and your key remaps, macros and lighting are cleared too. Continue?', icon='warning'):
+            return
+
+        def done():
+            self.app.kb = None          # the keyboard restarts; the program reconnects by itself
+        self.app.run(lambda kb: kb.factory_reset(), 'Keyboard reset: the screen shows the firmware clock again', after=done)
+
     def sync(self):
         if self.app.require_kb():
-            self.app.run(lambda kb: kb.set_time(), 'Clock synced')
+            self.app.run(lambda kb: kb.set_time(), 'Clock sent to the keyboard (the screen shows a time only through the Live screen clock card)')
 
     def upload(self):
         if not self.frames or not self.app.require_kb():

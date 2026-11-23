@@ -320,6 +320,10 @@ class TestKeyboardV2(unittest.TestCase):
             with self.assertRaises(ValueError):
                 kb._frame(bad, 1, 0)
 
+    def test_reset_frame(self):
+        f = ak980.KeyboardV2.reset_frame()
+        self.assertEqual((len(f), f[:3], f[3:]), (64, bytes([0xAA, 0x0F, 0xFF]), bytes(61)))
+
     def test_set_keymap_changes_only_listed_keys(self):
         import keys
         kb = self.fake()
