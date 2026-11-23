@@ -7,6 +7,7 @@
 # without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
 # Public License (LICENSE) for more details. Not affiliated with or endorsed by AJAZZ.
 """AK980 Manager - main window (English UI). Close the official AJAZZ app first (a banner offers to do it)."""
+import ctypes
 import os
 import queue
 import subprocess
@@ -28,6 +29,33 @@ NAV = [('Lighting', '☀', pages.LightingPage), ('Per-key', '▦', pages.PerKeyP
        ('Profiles', '◧', profiles.ProfilesPage), ('System', '⚙', pages.SystemPage)]
 NAV_GROUPS = {'Lighting': 'LIGHTING', 'Keys': 'KEYS AND MACROS', 'Screen': 'DEVICE'}      # section heading above these items
 NO_WINDOW = 0x08000000
+APP_ID = 'j0p3s.AK980Manager'       # own taskbar identity, so Windows shows this program's icon and not python.exe's
+
+
+def _set_app_id():
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
+    except Exception:
+        pass
+
+
+def _set_window_icons(win, path):
+    """Give the window its big (taskbar, Alt+Tab) and small (title bar) icon from assets/icon.ico, at the sizes Windows asks for."""
+    try:
+        u32 = ctypes.windll.user32
+        u32.LoadImageW.restype = ctypes.c_void_p
+        u32.SendMessageW.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_size_t, ctypes.c_void_p]
+        win.update_idletasks()
+        hwnd = u32.GetParent(win.winfo_id()) or win.winfo_id()
+        win._icon_handles = []
+        for kind, metric in ((1, 11), (0, 49)):          # ICON_BIG / SM_CXICON, ICON_SMALL / SM_CXSMICON
+            size = u32.GetSystemMetrics(metric)
+            h = u32.LoadImageW(None, path, 1, size, size, 0x10)       # IMAGE_ICON, LR_LOADFROMFILE
+            if h:
+                win._icon_handles.append(h)
+                u32.SendMessageW(hwnd, 0x80, kind, h)                 # WM_SETICON
+    except Exception:
+        pass
 
 
 def _resource(rel):
@@ -130,6 +158,7 @@ class App(tk.Tk):
             self.iconbitmap(default=_resource('assets/icon.ico'))
         except Exception:
             pass
+        _set_window_icons(self, _resource('assets/icon.ico'))
         self.kb = None
         self.streaming = False
         self.pending = None
@@ -428,6 +457,7 @@ def main():
     if '--selftest' in sys.argv:
         selftest()
         return
+    _set_app_id()
     import bootstrap
     r = bootstrap.run_startup()
     if r == 'staged':                              # packaged .exe: a helper swaps the folder after we exit and restarts the new version
