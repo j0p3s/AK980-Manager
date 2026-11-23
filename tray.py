@@ -6,6 +6,7 @@ The icon lives on its own thread with a hidden window and message loop; callback
 them to its own thread (App.post). A second launch asks the running copy to show its window and exits - this also works
 when the running copy is elevated (started by the Task Scheduler task) and the new one is not.
 """
+import i18n
 import ctypes
 import threading
 from ctypes import wintypes as wt
@@ -142,9 +143,9 @@ class Tray:
 
     def _menu(self):
         m = u32.CreatePopupMenu()
-        u32.AppendMenuW(m, 0, ID_SHOW, 'Show Ajazz AK980 V2 Manager')
+        u32.AppendMenuW(m, 0, ID_SHOW, i18n.tr('Show Ajazz AK980 V2 Manager'))
         u32.AppendMenuW(m, 0x800, 0, None)                                      # separator
-        u32.AppendMenuW(m, 0, ID_QUIT, 'Quit')
+        u32.AppendMenuW(m, 0, ID_QUIT, i18n.tr('Quit'))
         pt = wt.POINT()
         u32.GetCursorPos(ctypes.byref(pt))
         u32.SetForegroundWindow(self.hwnd)                                      # required or the menu will not close when clicking away

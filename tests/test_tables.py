@@ -251,3 +251,36 @@ class Backup(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestI18n(unittest.TestCase):
+    def tearDown(self):
+        import i18n
+        i18n.set_language('English')
+
+    def test_catalog_is_complete(self):
+        import i18n_catalog
+        for src, tr_ in i18n_catalog.ENTRIES.items():
+            self.assertEqual(len(tr_), 4, src)
+            self.assertTrue(all(tr_), src)
+            for t in tr_:                                           # a translation keeps the same %-placeholders
+                self.assertEqual(sorted(__import__('re').findall(r'%[-+ #0]?\d*(?:\.\d+)?[dsfi]', src)),
+                                 sorted(__import__('re').findall(r'%[-+ #0]?\d*(?:\.\d+)?[dsfi]', t)), src)
+
+    def test_translate_and_patterns(self):
+        import i18n
+        i18n.set_language('Français')
+        self.assertEqual(i18n.tr('Brightness'), 'Luminosité')
+        self.assertEqual(i18n.tr('%d slideshow frames added' % 4), '4 images de diaporama ajoutées')
+        self.assertIn('(11%)', i18n.tr('Keyboard macro memory: 312 of 2700 bytes used (11%), 1 of 100 macros.'))
+        self.assertEqual(i18n.tr('Some unknown text'), 'Some unknown text')
+        i18n.set_language('English')
+        self.assertEqual(i18n.tr('Brightness'), 'Brightness')
+
+    def test_untr_round_trip(self):
+        import i18n
+        for lang in i18n.LANGUAGES[1:]:
+            i18n.set_language(lang)
+            for src in ('Once', 'Every day', 'Rainbow', 'Hide to the tray', 'Update automatically', 'Play once'):
+                self.assertEqual(i18n.untr(i18n.tr(src)), src, (lang, src))
+

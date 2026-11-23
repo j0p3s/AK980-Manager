@@ -173,6 +173,7 @@ class App(tk.Tk):
         import appsettings
         ak980.set_calibration(*appsettings.get('calibration'))
         i18n.set_language(appsettings.get('language'))
+        i18n.install()
         self.live_settings = live.load_settings()
         self.live_worker = None
         self.light = {'effect': 'Static', 'rgb': [255, 0, 0], 'colorful': False, 'bright': 3, 'speed': 3, 'direction': 0}

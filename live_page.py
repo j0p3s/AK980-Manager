@@ -1,6 +1,7 @@
 # Ajazz AK980 V2 Manager - control software for the AJAZZ AK980 (V2) PRO keyboard
 # Copyright (C) 2026 j0p3s. GPL-3.0-or-later (see LICENSE). Not affiliated with or endorsed by AJAZZ.
 """The Live screen page: cards that put themselves on the keyboard's screen (see live.py)."""
+import i18n
 import datetime
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -185,8 +186,8 @@ class LivePage(Page):
         self.lb.delete(0, 'end')
         for r in self._settings()['reminders']:
             kind = r.get('repeat', 'Once')
-            when = r.get('at', '') if kind == 'Once' else ('daily %s' % r.get('at', '')[-5:] if kind == 'Every day' else
-                                                          'every %s min %s-%s' % (r.get('every', 60), r.get('from', '09:00'), r.get('to', '18:00')))
+            when = r.get('at', '') if kind == 'Once' else (i18n.tr('daily %s') % r.get('at', '')[-5:] if kind == 'Every day' else
+                                                          i18n.tr('every %s min %s-%s') % (r.get('every', 60), r.get('from', '09:00'), r.get('to', '18:00')))
             self.lb.insert('end', '  %s   %s' % (when, r.get('text', '')))
 
     def _add_reminder(self):

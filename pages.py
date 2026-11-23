@@ -1566,7 +1566,7 @@ class SystemPage(Page):
         import i18n
         grow = tk.Frame(gen.body, bg=C['card'])
         grow.pack(fill='x')
-        label(grow, 'Language of the menu and page titles', 10, False, C['muted'], C['card']).grid(row=0, column=0, sticky='w', pady=4)
+        label(grow, 'Interface language', 10, False, C['muted'], C['card']).grid(row=0, column=0, sticky='w', pady=4)
         self.lang = ttk.Combobox(grow, values=list(i18n.LANGUAGES), state='readonly', width=18)
         self.lang.set(appsettings.get('language'))
         self.lang.grid(row=0, column=1, padx=14)
