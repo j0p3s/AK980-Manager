@@ -130,6 +130,13 @@ def macro_events(text, delay):
     return ev
 
 
+def events_of(m):
+    """Events of a saved macro: recorded ones, or the typed text."""
+    if m.get('events'):
+        return [tuple(e) for e in m['events']]
+    return macro_events(m['text'], m['delay'])
+
+
 def macro_unsupported(text):
     """Characters of text that cannot be typed with the keys of the active layout."""
     typed = ''.join(v for k, v in _parse_macro(text) if k == 'text')
@@ -1048,7 +1055,7 @@ class KeysPage(Page):
     def _write(self, layers, msg):
         def job(kb):
             if self.app.macros:
-                kb.set_macros([macro_events(m['text'], m['delay']) for m in self.app.macros])
+                kb.set_macros([events_of(m) for m in self.app.macros])
                 kb.wait_ready()
             for layer, entries in layers.items():
                 kb.set_keymap(entries, layer)
@@ -1056,78 +1063,308 @@ class KeysPage(Page):
 
 
 # ------------------------------------------------------------------------------------------------ macros
+USAGE_NAMES = {}
+for _k in keys.KEYS:
+    USAGE_NAMES.setdefault(_k[2], html.unescape(_k[1]))
+USAGE_NAMES.update({224: 'Ctrl', 225: 'Shift', 226: 'Alt', 227: 'Win', 228: 'Right Ctrl', 229: 'Right Shift', 230: 'Alt Gr', 231: 'Right Win',
+                    41: 'Esc', 42: 'Backspace', 43: 'Tab', 40: 'Enter', 44: 'Space', 57: 'Caps Lock', 73: 'Insert', 77: 'End', 70: 'Print Screen',
+                    101: 'Menu', 88: 'Keypad Enter', 53: '` ~', 100: 'ISO key'})
+MOUSE_NAMES = {1: 'Left click', 2: 'Right click', 4: 'Middle click'}
+MACRO_SLOTS = 100               # directory slots in the keyboard's macro table
+
+
+def event_label(e):
+    usage, down, delay = e[:3]
+    mouse = len(e) > 3 and e[3]
+    name = MOUSE_NAMES.get(usage, 'button %d' % usage) if mouse else USAGE_NAMES.get(usage, 'key %d' % usage)
+    return '%-14s %-8s wait %d ms' % (name, 'press' if down else 'release', delay)
+
+
+def events_summary(ev):
+    keys_n = sum(1 for e in ev if e[1] and not (len(e) > 3 and e[3]))
+    clicks = sum(1 for e in ev if e[1] and len(e) > 3 and e[3])
+    secs = sum(e[2] for e in ev) / 1000.0
+    return '%d key presses%s, %.1f s' % (keys_n, ', %d clicks' % clicks if clicks else '', secs)
+
+
 class MacrosPage(Page):
-    title, subtitle = 'Macros', 'Text macros you can put on any key (Keys page). Typed the way your Windows layout types them: capitals, symbols, accents.'
+    title, subtitle = 'Macros', 'Type text, record keys and clicks, or build a macro step by step. Put it on any key on the Keys page.'
 
     def __init__(self, parent, app):
         super().__init__(parent, app)
+        self.events, self.cur, self.recorder = [], None, None      # events being edited, index of the macro being edited
         body = tk.Frame(self, bg=C['bg'])
         body.pack(fill='both', expand=True)
         left = Card(body, 'Your macros')
-        left.pack(side='left', fill='both', expand=True, padx=(0, 12))
-        self.lb = listbox(left.body, 14)
+        left.pack(side='left', fill='y', padx=(0, 12))
+        self.lb = listbox(left.body, 16, width=34)
         self.lb.pack(fill='both', expand=True)
         self.lb.bind('<<ListboxSelect>>', self.pick)
-        Btn(left.body, 'Delete selected', self.remove, 'danger', height=32).pack(anchor='w', pady=(10, 0))
-        right = Card(body, 'Edit')
-        right.pack(side='left', fill='y')
-        right.configure(width=360)
-        b = right.body
-        label(b, 'Name', 10, False, C['muted'], C['card']).pack(anchor='w')
-        self.name = ttk.Entry(b, width=34)
-        self.name.pack(anchor='w', pady=(2, 10))
-        label(b, 'Text to type', 10, False, C['muted'], C['card']).pack(anchor='w')
-        self.text = ttk.Entry(b, width=34)
-        self.text.pack(anchor='w', pady=(2, 10))
-        self.delay = tk.IntVar(value=40)
-        Slider(b, 'Delay between keys', self.delay, 10, 500, 10, width=290, unit=' ms').pack(fill='x', pady=(0, 14))
-        Btn(b, 'Save macro', self.add, 'primary', height=36).pack(anchor='w')
-        label(b, 'Mouse and pauses: {click} {rightclick} {middleclick}\n{wait 500} adds a 500 ms pause; {{ and }} are literal braces.', 9,
-              False, C['muted'], C['card'], justify='left').pack(anchor='w', pady=(14, 0))
-        label(b, 'After saving, assign it to a key on the Keys page (Make it: Macro)\nand press Apply there.', 9, False, C['muted'],
-              C['card'], justify='left').pack(anchor='w', pady=(14, 0))
-        self._refresh()
+        r1 = tk.Frame(left.body, bg=C['card'])
+        r1.pack(fill='x', pady=(10, 0))
+        Btn(r1, 'New', self.new, 'ghost', height=30, width=70).pack(side='left')
+        Btn(r1, 'Duplicate', self.duplicate, 'ghost', height=30, width=90).pack(side='left', padx=6)
+        Btn(r1, 'Delete', self.remove, 'danger', height=30, width=70).pack(side='left')
+        r2 = tk.Frame(left.body, bg=C['card'])
+        r2.pack(fill='x', pady=(8, 0))
+        Btn(r2, 'Import...', self.import_, 'ghost', height=30, width=100).pack(side='left')
+        Btn(r2, 'Export...', self.export, 'ghost', height=30, width=100).pack(side='left', padx=6)
+        self.mem = label(left.body, '', 9, False, C['muted'], C['card'], justify='left', wraplength=250)
+        self.mem.pack(anchor='w', pady=(12, 0))
 
-    def add(self):
-        n, t = self.name.get().strip(), self.text.get()
-        if not n or not macro_events(t, 10):
-            messagebox.showerror('Macro', 'Give a name and some text to type.')
+        right = tk.Frame(body, bg=C['bg'])
+        right.pack(side='left', fill='both', expand=True)
+        top = Card(right, 'Macro')
+        top.pack(fill='x')
+        row = tk.Frame(top.body, bg=C['card'])
+        row.pack(fill='x')
+        label(row, 'Name', 10, False, C['muted'], C['card']).pack(side='left')
+        self.name = ttk.Entry(row, width=28)
+        self.name.pack(side='left', padx=10)
+        self.rec_btn = Btn(row, 'Record keys', self.toggle_record, 'primary', height=34, width=130)
+        self.rec_btn.pack(side='right')
+        self.rec_msg = label(top.body, 'Record: press the button, use the keys and mouse clicks in any other program, then come back and press '
+                             'Stop. Keys pressed while this window is in front are ignored.', 9, False, C['muted'], C['card'],
+                             justify='left', wraplength=520)
+        self.rec_msg.pack(anchor='w', pady=(8, 0))
+        trow = tk.Frame(top.body, bg=C['card'])
+        trow.pack(fill='x', pady=(12, 0))
+        label(trow, 'Type text', 10, False, C['muted'], C['card']).pack(side='left')
+        self.text = ttk.Entry(trow, width=34)
+        self.text.pack(side='left', padx=10)
+        Btn(trow, 'Add to steps', self.add_text, 'ghost', height=30, width=110).pack(side='left')
+        self.delay = tk.IntVar(value=40)
+        Slider(top.body, 'Delay between typed keys', self.delay, 10, 500, 10, width=300, unit=' ms').pack(anchor='w', pady=(10, 0))
+        label(top.body, 'Typed like your Windows layout: capitals, symbols, accents. Mouse: {click} {rightclick} {middleclick}; '
+              '{wait 500} adds a pause; {{ and }} are literal braces.', 9, False, C['muted'], C['card'], justify='left',
+              wraplength=520).pack(anchor='w', pady=(6, 0))
+
+        steps = Card(right, 'Steps')
+        steps.pack(fill='both', expand=True, pady=12)
+        self.steps = listbox(steps.body, 10, selectmode='extended')
+        self.steps.configure(font=('Consolas', 10))
+        self.steps.pack(fill='both', expand=True)
+        self.summary = label(steps.body, '', 10, False, C['muted'], C['card'])
+        self.summary.pack(anchor='w', pady=(8, 0))
+        tools = tk.Frame(steps.body, bg=C['card'])
+        tools.pack(fill='x', pady=(8, 0))
+        Btn(tools, 'Delete selected', self.del_steps, 'ghost', height=30, width=130).pack(side='left')
+        Btn(tools, 'Clear all', self.clear_steps, 'ghost', height=30, width=90).pack(side='left', padx=6)
+        label(tools, 'Wait', 10, False, C['muted'], C['card']).pack(side='left', padx=(16, 4))
+        self.wait = ttk.Spinbox(tools, from_=10, to=60000, increment=10, width=7)
+        self.wait.set(100)
+        self.wait.pack(side='left')
+        Btn(tools, 'Set on selected', self.set_wait, 'ghost', height=30, width=120).pack(side='left', padx=6)
+        self.speed = tk.DoubleVar(value=1.0)
+        Slider(steps.body, 'Speed (all waits)', self.speed, 0.25, 4.0, 0.25, width=300, fmt='%.2f', unit='x').pack(anchor='w', pady=(10, 0))
+        Btn(steps.body, 'Apply speed', self.apply_speed, 'ghost', height=30, width=110).pack(anchor='w', pady=(6, 0))
+
+        foot = tk.Frame(right, bg=C['bg'])
+        foot.pack(fill='x')
+        Btn(foot, 'Save macro', self.save, 'primary', height=38, width=130).pack(side='left')
+        Btn(foot, 'Save and send to keyboard', self.save_and_send, 'ghost', height=38, width=210).pack(side='left', padx=10)
+        label(foot, 'Then assign it to a key on the Keys page (Make it: Macro) and press Apply there.', 9, False, C['muted']).pack(side='left', padx=6)
+        self._refresh()
+        self._show_steps()
+
+    # ---- steps
+    def _show_steps(self):
+        self.steps.delete(0, 'end')
+        for i, e in enumerate(self.events):
+            self.steps.insert('end', '%3d  %s' % (i + 1, event_label(e)))
+        self.summary.configure(text=events_summary(self.events) if self.events else 'No steps yet: record keys, type some text or load a macro.')
+
+    def add_text(self):
+        t = self.text.get()
+        ev = macro_events(t, max(10, int(self.delay.get())))
+        if not ev:
+            messagebox.showerror('Macro', 'Type some text first.')
             return
         bad = macro_unsupported(t)
         if bad:
             messagebox.showwarning('Macro', 'These characters cannot be typed on your keyboard layout and will be skipped: %s' % ' '.join(bad))
-        m = {'name': n, 'text': t, 'delay': max(10, int(self.delay.get()))}
-        for i, x in enumerate(self.app.macros):
-            if x['name'] == n:
-                self.app.macros[i] = m
-                break
-        else:
-            self.app.macros.append(m)
-        self.app.save_macros()
-        self._refresh()
-        self.app.status_msg('Macro "%s" saved' % n, 'ok')
+        self.events += ev
+        self.text.delete(0, 'end')
+        self._show_steps()
+
+    def del_steps(self):
+        for i in reversed(self.steps.curselection()):
+            del self.events[i]
+        self._show_steps()
+
+    def clear_steps(self):
+        if self.events and messagebox.askyesno('Macro', 'Remove all steps of this macro?'):
+            self.events = []
+            self._show_steps()
+
+    def set_wait(self):
+        try:
+            w = max(10, min(65535, int(self.wait.get())))
+        except ValueError:
+            return
+        sel = self.steps.curselection()
+        for i in sel:
+            e = list(self.events[i])
+            e[2] = w
+            self.events[i] = tuple(e)
+        self._show_steps()
+        for i in sel:
+            self.steps.selection_set(i)
+
+    def apply_speed(self):
+        f = self.speed.get()
+        self.events = [(e[0], e[1], max(10, min(65535, int(e[2] / f)))) + tuple(e[3:]) for e in self.events]
+        self.speed.set(1.0)
+        self._show_steps()
+
+    # ---- recording
+    def toggle_record(self):
+        import recorder
+        if self.recorder is None:
+            try:
+                self.recorder = recorder.Recorder()
+                self.recorder.start()
+            except Exception as e:
+                self.recorder = None
+                messagebox.showerror('Macro', 'Could not start recording: %s' % e)
+                return
+            self.rec_btn.set_text('Stop recording')
+            self.rec_btn.kind = 'danger'
+            self.rec_btn._draw()
+            self._rec_tick()
+            return
+        ev = self.recorder.stop()
+        full, self.recorder = self.recorder.full, None
+        self.rec_btn.set_text('Record keys')
+        self.rec_btn.kind = 'primary'
+        self.rec_btn._draw()
+        if not ev:
+            self.rec_msg.configure(text='Nothing was recorded. Use the keys in another program while recording.', fg=C['muted'])
+            return
+        if self.events and not messagebox.askyesno('Macro', 'Add the recording to the existing steps?\n\nYes = append, No = replace them.'):
+            self.events = []
+        self.events += ev
+        if not self.name.get().strip():
+            self.name.insert(0, 'Recorded macro')
+        self.rec_msg.configure(text='%d events recorded%s. Check the steps below, name it and save.' % (
+            len(ev), ' (limit reached, the rest was dropped)' if full else ''), fg=C['ok'])
+        self._show_steps()
+
+    def _rec_tick(self):
+        if self.recorder is not None:
+            self.rec_msg.configure(text='Recording... %d events so far. Go to another program, use the keys, then come back and press Stop.'
+                                   % self.recorder.count, fg=C['bad'])
+            self.after(300, self._rec_tick)
+
+    # ---- the list of macros
+    def _refresh(self):
+        self.lb.delete(0, 'end')
+        total = 0
+        for i, m in enumerate(self.app.macros):
+            ev = events_of(m)
+            total += len(ev)
+            self.lb.insert('end', '  %d   %s   (%d events)' % (i, m['name'], len(ev)))
+        if self.cur is not None and self.cur < len(self.app.macros):
+            self.lb.selection_set(self.cur)
+        self.mem.configure(text='%d of %d macro slots used, %d events in total. The keyboard memory limit is not known: if a long '
+                           'macro is cut off, shorten it.' % (len(self.app.macros), MACRO_SLOTS, total), fg=C['muted'])
+
+    def new(self):
+        self.cur, self.events = None, []
+        self.name.delete(0, 'end')
+        self.text.delete(0, 'end')
+        self.lb.selection_clear(0, 'end')
+        self._show_steps()
 
     def pick(self, _=None):
         s = self.lb.curselection()
         if s:
             m = self.app.macros[s[0]]
+            self.cur = s[0]
             self.name.delete(0, 'end')
             self.name.insert(0, m['name'])
-            self.text.delete(0, 'end')
-            self.text.insert(0, m['text'])
-            self.delay.set(m['delay'])
+            self.events = events_of(m)
+            self.delay.set(m.get('delay', 40))
+            self._show_steps()
+
+    def save(self):
+        n = self.name.get().strip()
+        if not n or not self.events:
+            messagebox.showerror('Macro', 'Give the macro a name and at least one step.')
+            return False
+        m = {'name': n, 'delay': max(10, int(self.delay.get())), 'events': [list(e) for e in self.events]}
+        m['text'] = 'Steps: ' + events_summary(self.events)
+        same = [i for i, x in enumerate(self.app.macros) if x['name'] == n]
+        if self.cur is not None and self.cur < len(self.app.macros) and (not same or self.cur in same):
+            self.app.macros[self.cur] = m
+        elif same:
+            self.app.macros[same[0]] = m
+            self.cur = same[0]
+        else:
+            self.app.macros.append(m)
+            self.cur = len(self.app.macros) - 1
+        self.app.save_macros()
+        self._refresh()
+        self.app.status_msg('Macro "%s" saved' % n, 'ok')
+        return True
+
+    def save_and_send(self):
+        if self.save() and self.app.require_kb():
+            self.app.run(lambda kb: kb.set_macros([events_of(m) for m in self.app.macros]), 'Macros sent to the keyboard')
+
+    def duplicate(self):
+        s = self.lb.curselection()
+        if s:
+            m = json.loads(json.dumps(self.app.macros[s[0]]))
+            m['name'] += ' copy'
+            self.app.macros.append(m)
+            self.app.save_macros()
+            self.cur = len(self.app.macros) - 1
+            self._refresh()
+            self.lb.selection_clear(0, 'end')
+            self.lb.selection_set(self.cur)
+            self.pick()
 
     def remove(self):
         s = self.lb.curselection()
-        if s:
+        if s and messagebox.askyesno('Macro', 'Delete "%s"?\n\nKeys that use it on the Keys page need to be assigned again '
+                                     '(later macros move up by one).' % self.app.macros[s[0]]['name']):
             del self.app.macros[s[0]]
             self.app.save_macros()
+            self.cur = None
             self._refresh()
 
-    def _refresh(self):
-        self.lb.delete(0, 'end')
-        for i, m in enumerate(self.app.macros):
-            self.lb.insert('end', '  %d   %s   ->   %s' % (i, m['name'], m['text']))
+    def export(self):
+        s = self.lb.curselection()
+        if not s:
+            messagebox.showinfo('Macro', 'Select a macro in the list first.')
+            return
+        m = self.app.macros[s[0]]
+        f = filedialog.asksaveasfilename(defaultextension='.json', filetypes=[('Macro', '*.json')], initialfile=m['name'] + '.json')
+        if f:
+            save_json(f, {'ak980_macro': 1, 'name': m['name'], 'events': [list(e) for e in events_of(m)]})
+            self.app.status_msg('Macro exported', 'ok')
+
+    def import_(self):
+        f = filedialog.askopenfilename(filetypes=[('Macro', '*.json'), ('All files', '*.*')])
+        if not f:
+            return
+        try:
+            d = load_json(f, None)
+            ev = [(int(e[0]), bool(e[1]), max(10, min(65535, int(e[2]))), bool(e[3]) if len(e) > 3 else False) for e in d['events']]
+            if not ev or d.get('ak980_macro') != 1:
+                raise ValueError('not an AK980 macro file')
+        except Exception as e:
+            messagebox.showerror('Macro', 'Could not import this file: %s' % e)
+            return
+        self.app.macros.append({'name': str(d.get('name', 'Imported')), 'delay': 40, 'events': [list(e) for e in ev],
+                                'text': 'Steps: ' + events_summary(ev)})
+        self.app.save_macros()
+        self.cur = len(self.app.macros) - 1
+        self._refresh()
+        self.lb.selection_clear(0, 'end')
+        self.lb.selection_set(self.cur)
+        self.pick()
 
 
 # ------------------------------------------------------------------------------------------------ system

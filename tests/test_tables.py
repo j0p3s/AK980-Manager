@@ -100,5 +100,28 @@ class Settings(unittest.TestCase):
             self.assertTrue(appsettings.get('close_to_tray', path))
 
 
+class Recorder(unittest.TestCase):
+    def test_collector(self):
+        import recorder
+        c = recorder.Collector()
+        c.key(0x1E, False, True, 0.0)
+        c.key(0x1E, False, True, 0.05)            # auto-repeat is ignored
+        c.key(0x1E, False, False, 0.1)
+        c.key(0x1D, True, False, 0.2)             # release of a key held before recording is ignored
+        c.mouse(0x0201, 0.5)
+        c.key(0x38, False, True, 0.75)            # still held when recording ends -> released automatically
+        ev = c.finish(0.75)
+        self.assertEqual(ev, [(4, True, 10, False), (4, False, 100, False), (1, True, 400, True),
+                              (226, True, 250, False), (1, False, 10, True), (226, False, 10, False)])
+        self.assertEqual(recorder.scan_to_usage(0x48, True), 82)       # Up arrow
+        self.assertEqual(recorder.scan_to_usage(0x48, False), 96)      # keypad 8
+
+    def test_recorded_macro_events(self):
+        import pages
+        m = {'name': 'x', 'text': 'Recorded', 'delay': 40, 'events': [[4, True, 10, False], [4, False, 100, False]]}
+        self.assertEqual(pages.events_of(m), [(4, True, 10, False), (4, False, 100, False)])
+        self.assertTrue(len(ak980.Keyboard.macro_table([pages.events_of(m)])) >= 640)
+
+
 if __name__ == '__main__':
     unittest.main()

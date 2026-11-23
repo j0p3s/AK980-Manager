@@ -174,7 +174,7 @@ class ProfilesPage(Page):
 
         def job(kb):
             if app.macros:
-                kb.set_macros([pages.macro_events(m['text'], m['delay']) for m in app.macros])
+                kb.set_macros([pages.events_of(m) for m in app.macros])
                 kb.wait_ready()
             for layer, entries in layers.items():
                 kb.set_keymap(entries, layer)
