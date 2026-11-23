@@ -40,8 +40,11 @@ def save(path, connection='unknown', extra=None):
     """Write the diagnostics zip (report.txt plus the update log and the last self-test, if they exist)."""
     with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as z:
         z.writestr('report.txt', report(connection, extra))
-        for name in ('bootstrap.log', 'selftest.txt'):
+        for name in ('bootstrap.log', 'selftest.txt', 'debug.log'):
             f = os.path.join(DATA, name)
+            if name == 'debug.log':
+                import debuglog
+                f = debuglog.PATH
             if os.path.exists(f):
                 with open(f, 'rb') as fh:
                     z.writestr(name, fh.read()[-200_000:])

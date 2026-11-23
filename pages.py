@@ -1561,6 +1561,55 @@ class SystemPage(Page):
         self.bat_btn.pack(side='left')
         self.bat_msg = label(brow2, '', 10, False, C['muted'], C['card'], justify='left')
         self.bat_msg.pack(side='left', padx=14)
+        dbg = Card(self, 'Debug log')
+        dbg.pack(fill='x', pady=(14, 0))
+        import appsettings as _aps
+        import debuglog
+        label(dbg.body, 'Records every packet sent to and received from the keyboard, every action and every error (with details) in a file. '
+              'Turn it on, repeat the problem, then send the file with your bug report.', 9, False, C['muted'], C['card'],
+              wraplength=720, justify='left').pack(anchor='w')
+        self.dbg_var = tk.BooleanVar(value=_aps.get('debug_log'))
+
+        def toggle():
+            _aps.set('debug_log', self.dbg_var.get())
+            debuglog.set_enabled(self.dbg_var.get())
+        tk.Checkbutton(dbg.body, text='Write a debug log', variable=self.dbg_var, command=toggle, bg=C['card'], fg=C['text'],
+                       selectcolor=C['card'], activebackground=C['card'], activeforeground=C['text']).pack(anchor='w', pady=(8, 0))
+        drow = tk.Frame(dbg.body, bg=C['card'])
+        drow.pack(fill='x', pady=(8, 0))
+
+        def open_log():
+            os.makedirs(debuglog.DATA, exist_ok=True)
+            if not os.path.exists(debuglog.PATH):
+                open(debuglog.PATH, 'a').close()
+            os.startfile(debuglog.PATH)
+
+        def open_folder():
+            os.makedirs(debuglog.DATA, exist_ok=True)
+            os.startfile(debuglog.DATA)
+        Btn(drow, 'Open log', open_log, 'ghost', height=34).pack(side='left')
+        Btn(drow, 'Open folder', open_folder, 'ghost', height=34).pack(side='left', padx=10)
+        Btn(drow, 'Clear log', debuglog.clear, 'ghost', height=34).pack(side='left', padx=(0, 10))
+
+        def save_log():
+            import diagnostics
+            f = filedialog.asksaveasfilename(defaultextension='.txt', filetypes=[('Text', '*.txt')], initialfile='AK980 Manager log.txt')
+            if not f:
+                return
+            try:
+                text = diagnostics.report('USB cable' if self.app.kb else 'not connected')
+                text += chr(10) + "--- debug log ---" + chr(10)
+                if os.path.exists(debuglog.PATH):
+                    with open(debuglog.PATH, encoding='utf-8', errors='replace') as fh:
+                        text += fh.read()[-2_000_000:]
+                else:
+                    text += '(empty: turn on "Write a debug log", repeat the problem, then save again)' + chr(10)
+                with open(f, 'w', encoding='utf-8') as fh:
+                    fh.write(text)
+                messagebox.showinfo('Save log', 'Saved. Send this file with your bug report:' + chr(10) + f)
+            except OSError as e:
+                messagebox.showerror('Save log', 'Could not save: %s' % e)
+        Btn(drow, 'Save log to a file...', save_log, 'primary', height=34).pack(side='left')
         gen = Card(self, 'Language, updates and support')
         gen.pack(fill='x', pady=(14, 0))
         import appsettings

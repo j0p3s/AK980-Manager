@@ -13,6 +13,7 @@ See docs/PROTOCOL.md for the full description.
 IMPORTANT: the official AJAZZ app polls the keyboard ~12x/s and breaks writes; close it before using this.
 """
 import ctypes, queue, threading, time
+import debuglog
 from ctypes import wintypes as w
 
 VID, PID, IFACE = 0x0C45, 0x8009, 'mi_03'
@@ -135,6 +136,7 @@ class Keyboard:
             h = self._open()
             try:
                 for p in packets:
+                    debuglog.log('V1 TX: %s' % debuglog.hexs(p))
                     self._xfer(h, p)
             finally:
                 k32.CloseHandle(h)
@@ -777,6 +779,7 @@ class KeyboardV2:
                     while not self._acks.empty():
                         self._acks.get_nowait()
                     n = w.DWORD()
+                    debuglog.log('V2 TX cmd 0x%02x try %d: %s' % (cmd, attempt, debuglog.hexs(frame)))
                     if not k32.WriteFile(self._hw, bytes([0]) + frame, 65, ctypes.byref(n), None) or n.value != 65:
                         raise OSError('write failed (error %d)' % ctypes.get_last_error())
                     end = time.time() + timeout
@@ -785,10 +788,12 @@ class KeyboardV2:
                             r = self._acks.get(timeout=0.05)
                         except queue.Empty:
                             continue
+                        debuglog.log('V2 RX: %s' % debuglog.hexs(r))
                         if r[:2] == bytes([0x55, cmd]):
                             got = r
                     if got is not None:
                         break
+                    debuglog.log('V2 no answer to cmd 0x%02x (try %d)' % (cmd, attempt))
                 if got is None:
                     raise OSError('The keyboard did not answer (command 0x%02x). Unplug and replug it, or press a key to wake it.' % cmd)
                 out.append(got[8:8 + length])
@@ -998,6 +1003,7 @@ class KeyboardV2:
         body[2] = 1 if fn_toggle else 0
         body[3] = self.SLEEP_MINUTES.get(sleep, 5)
         body[4] = level
+        debuglog.log('V2 set_system sleep=%s level=%s fn_toggle=%s' % (sleep, level, fn_toggle))
         self._exchange(0x21, 56, bytes(body), timeout=1.0)
 
     # --- real-time lighting (cmd 0x32 as the web driver's setMusicData: 4-byte entries `led r g b`, 56 data bytes per frame) -----------

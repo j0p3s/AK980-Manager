@@ -8,6 +8,7 @@
 # Public License (LICENSE) for more details. Not affiliated with or endorsed by AJAZZ.
 """Ajazz AK980 V2 Manager - main window (English UI). Close the official AJAZZ app first (a banner offers to do it)."""
 import ctypes
+import debuglog
 import os
 import queue
 import subprocess
@@ -157,6 +158,8 @@ class ScrollHost(tk.Frame):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
+        debuglog.init()
+        self.report_callback_exception = lambda et, ev, tb: debuglog.log('UI ERROR: %s' % ''.join(__import__('traceback').format_exception(et, ev, tb)))
         self.title('Ajazz AK980 V2 Manager')
         self._place(1240, 820, 1100, 740)
         theme.setup(self)
@@ -279,7 +282,11 @@ class App(tk.Tk):
 
     def _on_wheel(self, e):
         """Mouse wheel scrolls the page unless the pointer is over a widget that scrolls by itself."""
-        if self.current and e.widget.winfo_class() not in ('Listbox', 'Text', 'Treeview', 'TCombobox', 'Scale', 'TScale'):
+        try:
+            cls = e.widget.winfo_class() if not isinstance(e.widget, str) else 'Listbox'    # a drop-down list reports its widget as a plain string
+        except Exception:
+            cls = 'Listbox'
+        if self.current and cls not in ('Listbox', 'Text', 'Treeview', 'TCombobox', 'Scale', 'TScale'):
             self.hosts[self.current].wheel(e.delta)
 
     def show(self, name):
@@ -307,6 +314,7 @@ class App(tk.Tk):
         c.create_text(32, 15, anchor='w', text='Keyboard connected' if ok else 'Keyboard not found', fill=C['text'], font=theme.font(10))
 
     def status_msg(self, text, kind='info'):
+        debuglog.log('STATUS[%s]: %s' % (kind, text))
         col = {'ok': C['ok'], 'err': C['bad'], 'info': C['muted']}[kind]
         self.status.configure(text=text, fg=C['text'] if kind != 'info' else C['muted'])
         self.dot.delete('all')
@@ -347,10 +355,16 @@ class App(tk.Tk):
 
         def work():
             try:
+                debuglog.log('ACTION: %s' % ok_msg)
                 job(self.kb)
+                debuglog.log('ACTION done: %s' % ok_msg)
                 self.post(self.status_msg, ok_msg, 'ok')
             except OSError as e:
+                debuglog.error('action "%s"' % ok_msg, e)
                 self.post(self.on_disconnect, e)
+            except Exception as e:
+                debuglog.error('action "%s"' % ok_msg, e)
+                self.post(self.status_msg, 'Error: %s (see the debug log on the System page)' % e, 'err')
             if after:
                 self.post(after)
         threading.Thread(target=work, daemon=True).start()
