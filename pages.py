@@ -417,6 +417,7 @@ class ReactivePage(Page):
         self.gain = tk.DoubleVar(value=1.0)
         self.scheme = tk.StringVar(value='Gradient')
         self.bgcol = tk.StringVar(value='Off')
+        self.amp = tk.DoubleVar(value=100)
         self.color = (124, 108, 255)
         self.runner = None
         top = Card(self, 'Mode')
@@ -472,6 +473,7 @@ class ReactivePage(Page):
                     cb = ttk.Combobox(d, values=vals, textvariable=var, state='readonly', width=18)
                     cb.pack(anchor='w')
                     cb.bind('<<ComboboxSelected>>', lambda e: self._live())
+                Slider(d, 'Amplitude', self.amp, 0, 100, 5, self._live, width=200, fmt='%d', unit=' %').pack(anchor='w', pady=(10, 0))
         if self.runner and self.runner.running:
             self.stop()
             self.start()
@@ -489,7 +491,7 @@ class ReactivePage(Page):
             e.fade, e.style, e.color = self.fade.get(), self.style.get(), self.color
         else:
             e.pal, e.gain = self.pal.get(), self.gain.get()
-            e.scheme, e.background = self.scheme.get(), self.bgcol.get()
+            e.scheme, e.background, e.amplitude = self.scheme.get(), self.bgcol.get(), int(self.amp.get())
 
     def toggle(self):
         if self.runner and self.runner.running:
@@ -506,7 +508,7 @@ class ReactivePage(Page):
                 eff = effects.KeyGlow(self.fade.get(), self.style.get(), self.color)
             else:
                 eff = effects.Equalizer('Bars' if self.mode.get() == 'Equalizer' else 'Bass pulse', self.pal.get(), self.gain.get(),
-                                        self.scheme.get(), self.bgcol.get())
+                                        self.scheme.get(), self.bgcol.get(), int(self.amp.get()))
         except Exception as e:
             messagebox.showerror('Reactive', 'Could not start: %s\n\nThe music effects need the "soundcard" and "numpy" packages '
                                  '(installed automatically on start).' % e)

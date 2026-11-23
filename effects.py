@@ -141,10 +141,10 @@ class Audio:
 class Equalizer:
     MODES = ('Bars', 'Bass pulse')
 
-    def __init__(self, mode='Bars', pal='Classic', gain=1.0, scheme='Gradient', background='Off'):
+    def __init__(self, mode='Bars', pal='Classic', gain=1.0, scheme='Gradient', background='Off', amplitude=100):
         import numpy as np
         self.np = np
-        self.scheme, self.background = scheme, background      # only used over 2.4G (the keyboard draws the bars)
+        self.scheme, self.background, self.amplitude = scheme, background, amplitude      # only used over 2.4G (the keyboard draws the bars)
         self.audio = Audio()
         self.mode, self.pal, self.gain = mode, pal, gain
         self.level = np.zeros(BANDS)
@@ -216,7 +216,7 @@ class Runner:
                     frame(t)
                     return [round(float(v) * ROWS) for v in self.effect.level]
                 self.kb.stream_music(levels, 10 ** 9, fps=30, stop=self.stop_event, style_fn=lambda: (
-                    ak980.MUSIC_SCHEMES.get(self.effect.scheme, 4), ak980.MUSIC_BACKGROUNDS.get(self.effect.background, 0), 100))
+                    ak980.MUSIC_SCHEMES.get(self.effect.scheme, 4), ak980.MUSIC_BACKGROUNDS.get(self.effect.background, 0), self.effect.amplitude))
             else:
                 self.kb.stream_realtime(frame, 10 ** 9, fps=self.fps, stop=self.stop_event)
         except Exception as e:                 # keyboard unplugged, audio device lost, ...
