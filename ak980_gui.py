@@ -6,7 +6,7 @@
 # option) any later version. It is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
 # without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
 # Public License (LICENSE) for more details. Not affiliated with or endorsed by AJAZZ.
-"""AK980 Manager - main window (English UI). Close the official AJAZZ app first (a banner offers to do it)."""
+"""Ajazz AK980 V2 Manager - main window (English UI). Close the official AJAZZ app first (a banner offers to do it)."""
 import ctypes
 import os
 import queue
@@ -151,7 +151,7 @@ class ScrollHost(tk.Frame):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title('AK980 Manager')
+        self.title('Ajazz AK980 V2 Manager')
         self._place(1240, 820, 1100, 740)
         theme.setup(self)
         try:
@@ -169,7 +169,7 @@ class App(tk.Tk):
         self.light.update(pages.load_json(pages.LIGHT_FILE, {}))
         self._build()
         threading.Thread(target=self._worker, daemon=True).start()
-        self.tray = tray.Tray(_resource('assets/icon.ico'), 'AK980 Manager', lambda: self.post(self.restore), lambda: self.post(self.quit_app))
+        self.tray = tray.Tray(_resource('assets/icon.ico'), 'Ajazz AK980 V2 Manager', lambda: self.post(self.restore), lambda: self.post(self.quit_app))
         self.tray.start()
         self.pc_listener = pcactions.Listener(lambda n: self.post(self._pc_key, n))
         self.pc_listener.start()
@@ -209,8 +209,9 @@ class App(tk.Tk):
         side.pack_propagate(False)
         logo = tk.Frame(side, bg=C['side'])
         logo.pack(fill='x', padx=18, pady=(22, 20))
-        label(logo, 'AK980', 18, True, C['text'], C['side']).pack(anchor='w')
-        label(logo, 'V2 PRO manager', 9, False, C['muted'], C['side']).pack(anchor='w')
+        label(logo, 'Ajazz', 10, False, C['muted'], C['side']).pack(anchor='w')
+        label(logo, 'AK980 V2', 18, True, C['text'], C['side']).pack(anchor='w')
+        label(logo, 'Manager', 10, False, C['muted'], C['side']).pack(anchor='w')
         self.nav = {}
         for i, (name, icon, cls) in enumerate(NAV):
             if name in NAV_GROUPS:

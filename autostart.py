@@ -41,7 +41,7 @@ def _xml():
     u, e = escape(user), escape
     return f'''<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo><Description>Starts AK980 Manager when you sign in (elevated).</Description></RegistrationInfo>
+  <RegistrationInfo><Description>Starts Ajazz AK980 V2 Manager when you sign in (elevated).</Description></RegistrationInfo>
   <Triggers><LogonTrigger><Enabled>true</Enabled><UserId>{u}</UserId><Delay>PT5S</Delay></LogonTrigger></Triggers>
   <Principals><Principal id="Author"><UserId>{u}</UserId><LogonType>InteractiveToken</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals>
   <Settings>
@@ -111,7 +111,7 @@ def enable():
     except OSError:
         pass
     if ok:
-        return True, 'AK980 Manager will start with Windows, as administrator.'
+        return True, 'Ajazz AK980 V2 Manager will start with Windows, as administrator.'
     return False, 'Not enabled (the administrator prompt was declined or Windows refused; code %s).' % code
 
 

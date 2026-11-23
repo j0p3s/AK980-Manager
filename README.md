@@ -1,4 +1,4 @@
-# AK980 Manager
+# Ajazz AK980 V2 Manager
 
 An English, open-source replacement for the Chinese-only software of the **AJAZZ AK980 (V2) PRO** keyboard
 (USB `0C45:8009`). Written by reverse engineering the official app's USB/HID traffic — see [docs/PROTOCOL.md](docs/PROTOCOL.md).

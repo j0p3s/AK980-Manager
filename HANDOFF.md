@@ -1,7 +1,9 @@
 # Handoff — AK980 Manager
 
 Last updated: 2026-11-23 (fourth session: effects + shortcuts verified, Music Rhythm colours over 2.4G, Macros page rewrite with recorder, GUI nav sections + Ctrl+1..8, v2.0.0 released).
-Repository: https://github.com/j0p3s/AK980-Manager · License: GPL-3.0-or-later · latest release **v2.0.2**.
+Repository: https://github.com/j0p3s/AK980-Manager · License: GPL-3.0-or-later · latest release **v2.0.3**.
+
+**Name:** the program is shown as "Ajazz AK980 V2 Manager" (window title, sidebar, tray, messages) since 2.0.3. Internal names are deliberately unchanged because the self-update, the startup task and the single-instance check depend on them: exe/folder `AK980 Manager`, zip `AK980-Manager-windows.zip`, data folder `%APPDATA%\AK980Manager`, repo `j0p3s/AK980-Manager`.
 
 ## What this is
 English control software for the user's **AJAZZ AK980 V2 PRO** keyboard (Sonix `0C45:8009` wired, `0C45:FEFE` 2.4G dongle), because the official app is Chinese-only.

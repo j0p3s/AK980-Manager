@@ -142,7 +142,7 @@ class Tray:
 
     def _menu(self):
         m = u32.CreatePopupMenu()
-        u32.AppendMenuW(m, 0, ID_SHOW, 'Show AK980 Manager')
+        u32.AppendMenuW(m, 0, ID_SHOW, 'Show Ajazz AK980 V2 Manager')
         u32.AppendMenuW(m, 0x800, 0, None)                                      # separator
         u32.AppendMenuW(m, 0, ID_QUIT, 'Quit')
         pt = wt.POINT()

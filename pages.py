@@ -658,7 +658,7 @@ class KeysPage(Page):
         self.pc_value.trace_add('write', lambda *a: self._preview())
         self.pc_browse = Btn(self.pc_opts, 'Browse...', self._browse, height=28, size=9)
         self.pc_browse.pack(side='left', padx=8)
-        label(self.pc_opts, 'Runs on the PC: AK980 Manager must be running (it can start with Windows).', 9, False, C['muted'],
+        label(self.pc_opts, 'Runs on the PC: Ajazz AK980 V2 Manager must be running (it can start with Windows).', 9, False, C['muted'],
               C['card']).pack(side='left', padx=8)
         mods = tk.Frame(b, bg=C['card'])
         self.mods_frame = mods
@@ -827,7 +827,7 @@ class KeysPage(Page):
             ac = e.get('action', {})
             what = {'Open program': 'Opens the program', 'Open website': 'Opens the website', 'Open file': 'Opens the file',
                     'Send text': 'Types the text'}.get(ac.get('type'), 'Runs')
-            return ac.get('type', 'PC action'), '%s %s. Done by AK980 Manager on the PC: it has to be running (tray).' % (what, ac.get('value', ''))
+            return ac.get('type', 'PC action'), '%s %s. Done by Ajazz AK980 V2 Manager on the PC: it has to be running (tray).' % (what, ac.get('value', ''))
         if t == 5:
             return 'nothing', 'The key is disabled: pressing it does nothing.'
         if t == 3:

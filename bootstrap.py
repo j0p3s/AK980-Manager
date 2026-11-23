@@ -293,9 +293,9 @@ def run_startup(gui=True):
                 import tkinter as tk
                 from tkinter import ttk
                 root = tk.Tk()
-                root.title('AK980 Manager')
+                root.title('Ajazz AK980 V2 Manager')
                 root.resizable(False, False)
-                ttk.Label(root, text='Setting up AK980 Manager (first run or update)...', padding=(20, 14, 20, 4)).pack()
+                ttk.Label(root, text='Setting up Ajazz AK980 V2 Manager (first run or update)...', padding=(20, 14, 20, 4)).pack()
                 lab = tk.StringVar(value=work['msg'] or 'Please wait...')
                 ttk.Label(root, textvariable=lab, padding=(20, 0, 20, 6)).pack()
                 bar = ttk.Progressbar(root, mode='indeterminate', length=320)

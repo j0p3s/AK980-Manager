@@ -39,7 +39,7 @@ def path_of(name):
 def validate(d):
     """Return an error text if d is not a usable profile, else ''."""
     if not isinstance(d, dict) or d.get('format') != FORMAT:
-        return 'This file is not an AK980 Manager profile.'
+        return 'This file is not an Ajazz AK980 V2 Manager profile.'
     km = d.get('keymap')
     if not isinstance(km, dict) or not all(isinstance(km.get(l, {}), dict) for l in ('top', 'fn')):
         return 'The keymap in this profile is damaged.'
