@@ -13,6 +13,7 @@ import queue
 import subprocess
 import sys
 import threading
+import time
 import tkinter as tk
 from tkinter import messagebox
 
@@ -367,8 +368,30 @@ class App(tk.Tk):
                 self.status_msg('Keyboard connected' + (' over 2.4G (the screen, Key glow and Bass pulse need the USB cable)' if getattr(self.kb, 'wireless', False) else ''), 'ok')
             except OSError:
                 self._draw_pill(False)
-                self.status_msg('Keyboard not found - plug it in with the USB cable (wired mode).', 'err')
+                if getattr(self, '_bt_seen', None):
+                    self.status_msg('The keyboard is connected over Bluetooth (%s). This program cannot change settings over Bluetooth: '
+                                    'plug in the USB cable or use the 2.4G dongle.' % self._bt_seen, 'err')
+                else:
+                    self.status_msg('Keyboard not found - plug it in with the USB cable (wired mode).', 'err')
+                self._check_bluetooth()
         self.after(2000, self._tick_connect)
+
+    def _check_bluetooth(self):
+        """Now and then, while no USB/2.4G connection exists, see whether the keyboard is paired and connected over Bluetooth, so the
+        message can say that instead of 'not found' (Windows handles Bluetooth typing; the vendor Bluetooth channel is never touched)."""
+        if time.time() - getattr(self, '_bt_checked', 0) < 30 or getattr(self, '_bt_busy', False):
+            return
+        self._bt_checked, self._bt_busy = time.time(), True
+
+        def work():
+            try:
+                import battery
+                found = [f for f in battery.read() if f[1]]
+            except Exception:
+                found = []
+            self._bt_seen = found[0][0] if found else None
+            self._bt_busy = False
+        threading.Thread(target=work, daemon=True).start()
 
     def _tick_official(self):
         def check():

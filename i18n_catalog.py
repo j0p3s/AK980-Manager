@@ -597,4 +597,5 @@ ENTRIES = {
     'Calendar': ('Calendário', 'Calendrier', 'Calendario', 'Takvim'),
     'Programs': ('Programas', 'Programmes', 'Programas', 'Programlar'),
     'Macro file': ('Ficheiro de macro', 'Fichier de macro', 'Archivo de macro', 'Makro dosyası'),
+    'The keyboard is connected over Bluetooth (%s). This program cannot change settings over Bluetooth: plug in the USB cable or use the 2.4G dongle.': ('O teclado está ligado por Bluetooth (%s). Este programa não consegue alterar definições por Bluetooth: ligue o cabo USB ou use o recetor 2.4G.', 'Le clavier est connecté en Bluetooth (%s). Ce programme ne peut pas modifier les réglages en Bluetooth : branchez le câble USB ou utilisez le dongle 2.4G.', 'El teclado está conectado por Bluetooth (%s). Este programa no puede cambiar ajustes por Bluetooth: conecte el cable USB o use el receptor 2.4G.', 'Klavye Bluetooth ile bağlı (%s). Bu program Bluetooth üzerinden ayarları değiştiremez: USB kablosunu takın veya 2.4G alıcıyı kullanın.'),
 }
