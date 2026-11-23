@@ -23,6 +23,10 @@ EFFECTS = [  # id = index + 1 (all 19 verified on the cable keyboard 2026-11-23 
     'Ripples', 'Flowing', 'Pulsating', 'Tilt', 'Shuttle',
 ]
 EFFECT_ID = {n: i + 1 for i, n in enumerate(EFFECTS)}
+# Music Rhythm over 2.4G (captured from the official app, 2026-11-23): bar colours and background colour share one value list.
+MUSIC_SCHEMES = {'Green/Yellow/Red': 1, 'Rainbow': 2, 'Reverse Rainbow': 3, 'Gradient': 4, 'Spectrum Cycle': 5,
+                 'White': 6, 'Red': 7, 'Orange': 8, 'Yellow': 9, 'Green': 10, 'Blue': 11}
+MUSIC_BACKGROUNDS = {'Off': 0, 'White': 6, 'Red': 7, 'Orange': 8, 'Yellow': 9, 'Green': 10, 'Blue': 11}
 
 k32 = ctypes.WinDLL('kernel32', use_last_error=True)
 hid = ctypes.WinDLL('hid')
@@ -561,20 +565,22 @@ class DongleKeyboard:
     def _unsupported(self, *a, **k):
         raise OSError('This is not available over 2.4G yet - use the USB cable.')
 
-    def music_frame(self, levels):
-        """One Music Rhythm frame (captured from the official app): `0b 1c 00 04 00 64` + 19 column levels (0-6). The keyboard
-        draws the equaliser itself, so no colours are sent; the official app streams about 33 of these per second."""
+    def music_frame(self, levels, scheme=4, background=0, amplitude=100):
+        """One Music Rhythm frame (captured from the official app): `0b 1c 00 <scheme> <background> <amplitude>` + 19 column
+        levels (0-6). The keyboard draws the equaliser itself, so no colours are sent; the official app streams ~33 per second.
+        scheme = bar colours (MUSIC_SCHEMES), background = colour behind the bars (MUSIC_BACKGROUNDS), amplitude 0-100 %."""
         lv = bytes(max(0, min(6, int(v))) for v in levels[:19])
-        self._write32(bytes([0x0B, 0x1C, 0x00, 0x04, 0x00, 0x64]) + lv)
+        self._write32(bytes([0x0B, 0x1C, 0x00, scheme & 0xFF, background & 0xFF, max(0, min(100, int(amplitude)))]) + lv)
 
-    def stream_music(self, levels_fn, seconds, fps=30, stop=None):
-        """Call levels_fn(t) -> 19 levels (0-6) for `seconds` seconds at about `fps` frames/s (stop: threading.Event)."""
+    def stream_music(self, levels_fn, seconds, fps=30, stop=None, style_fn=None):
+        """Call levels_fn(t) -> 19 levels (0-6) for `seconds` seconds at about `fps` frames/s (stop: threading.Event).
+        style_fn() -> (scheme, background, amplitude), read every frame so it can change while running."""
         with self.lock:
             t0 = time.time()
             n = 0
             while time.time() - t0 < seconds and not (stop and stop.is_set()):
                 t = time.time() - t0
-                self.music_frame(levels_fn(t))
+                self.music_frame(levels_fn(t), *(style_fn() if style_fn else ()))
                 n += 1
                 time.sleep(max(0.0, n / fps - (time.time() - t0)))
             self.music_frame([0] * 19)

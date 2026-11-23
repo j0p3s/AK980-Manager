@@ -45,7 +45,7 @@ Commands are 33-byte output reports on the dongle's `MI_03` (usage page FF60), b
 (retried until acked; the link sleeps when idle, the first packets after a pause can be lost: ask the user to tap a key if everything times out). Lighting `05 10 00 <16 bytes>`, system `07 10 00 <wired body[0:14]> aa 55`
 (wait ~0.6 s after a table write), clock `0c 10 00 ...`. Bulk tables in 28-byte chunks `[cmd, len, seq] + data`, no replies: cmd `10` Top, `12` Fn, `14` per-key colours, `09` macros.
 **Fn layer needs an empty `12` bulk table first (chunks ~25 ms apart, then wait ~1.4 s) and only then the `0d 04` keys** - without it the keys are acked but do nothing (this cost an hour). Per-key: user-mode packet
-`05 10 00 80 00*8 <brightness> ...` (brightness byte at index 9; I once put it at 12 = black keys) then the `14` table. Macro length rule: `end//28 + 2` chunks. Music Rhythm: `0b 1c 00 04 00 64` + 19 column levels (0-6) at ~30 fps,
+`05 10 00 80 00*8 <brightness> ...` (brightness byte at index 9; I once put it at 12 = black keys) then the `14` table. Macro length rule: `end//28 + 2` chunks. Music Rhythm: `0b 1c 00 <bars> <background> <amplitude>` (bar/background colour values in `ak980.MUSIC_SCHEMES`, verified with `tools/verify_music.py`) + 19 column levels (0-6) at ~30 fps,
 the keyboard draws it (`DongleKeyboard.stream_music`, used by `effects.Runner` for the Equalizer "Bars" mode only). Bluetooth: the official app does not support settings there, nothing to do.
 
 ## Things that bite (read before touching the keyboard)
@@ -78,6 +78,6 @@ Its English strings: `research/ak980_extract/en_strings.txt`. Always rebuild the
 ## Open work / ideas
 1. GUI over the dongle was clicked through 2026-11-22 (Lighting, Per-key, Keys Fn remap + reset, System Apply, Reactive Equalizer with music, Macros/Screen/Profiles render). Still to eyeball: Fn Toggle via the System page on the cable, Macros page assign flow over the dongle.
 2. **2.4G leftovers**: none planned (key glow / Bass pulse / screen are not offered by the official app over the dongle). Unobserved: the clock packet's effect on the screen time; mouse events inside macros over the dongle (length rule only confirmed for keyboard events).
-3. Real-time Lighting scheme export (only the per-key scheme was captured), more Music Rhythm modes of the official app.
+3. Real-time Lighting scheme export (only the per-key scheme was captured). Music Rhythm over 2.4G now has the official app's bar colours + background (2026-11-23); the app's Amplitude slider is not exposed in the GUI (header byte exists, `music_frame(amplitude=)`).
 4. Still unverified on hardware: key response level 1 (the GUI only offers 2 and 3), the screen clock, bass pulse (cable). Music Rhythm Equalizer in the GUI is verified over the dongle only.
 5. Pages now scroll (ScrollHost in ak980_gui.py) when taller than the window, e.g. Keys on small screens. Polish left: high-DPI scaling was deliberately NOT done (fixed-size widgets; the program runs DPI-virtualised, fine but slightly soft - needs a visual pass on a scaled screen), on-screen keycap legends are ANSI, the GUI's look was never seen by the assistant (ask the user for feedback). Done in 1.0.6: X-button setting (System > Window, `appsettings.py`), tests (`python -m unittest discover -s tests`).

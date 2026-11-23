@@ -415,6 +415,8 @@ class ReactivePage(Page):
         self.style = tk.StringVar(value='Rainbow')
         self.pal = tk.StringVar(value='Classic')
         self.gain = tk.DoubleVar(value=1.0)
+        self.scheme = tk.StringVar(value='Gradient')
+        self.bgcol = tk.StringVar(value='Off')
         self.color = (124, 108, 255)
         self.runner = None
         top = Card(self, 'Mode')
@@ -460,6 +462,16 @@ class ReactivePage(Page):
             col.pack(side='left', padx=40)
             label(col, 'Colours', 10, False, C['muted'], C['card']).pack(anchor='w')
             Seg(col, effects_palettes(), self.pal, self._live).pack(anchor='w', pady=(6, 0))
+            if m == 'Equalizer':
+                d = tk.Frame(b, bg=C['card'])
+                d.pack(side='left', padx=40)
+                label(d, 'Over 2.4G the keyboard draws the bars:', 10, False, C['muted'], C['card']).pack(anchor='w')
+                for txt, var, vals in (('Bar colours', self.scheme, list(ak980.MUSIC_SCHEMES)),
+                                       ('Background', self.bgcol, list(ak980.MUSIC_BACKGROUNDS))):
+                    label(d, txt, 10, False, C['muted'], C['card']).pack(anchor='w', pady=(8, 0))
+                    cb = ttk.Combobox(d, values=vals, textvariable=var, state='readonly', width=18)
+                    cb.pack(anchor='w')
+                    cb.bind('<<ComboboxSelected>>', lambda e: self._live())
         if self.runner and self.runner.running:
             self.stop()
             self.start()
@@ -477,6 +489,7 @@ class ReactivePage(Page):
             e.fade, e.style, e.color = self.fade.get(), self.style.get(), self.color
         else:
             e.pal, e.gain = self.pal.get(), self.gain.get()
+            e.scheme, e.background = self.scheme.get(), self.bgcol.get()
 
     def toggle(self):
         if self.runner and self.runner.running:
@@ -492,7 +505,8 @@ class ReactivePage(Page):
             if self.mode.get() == 'Key glow':
                 eff = effects.KeyGlow(self.fade.get(), self.style.get(), self.color)
             else:
-                eff = effects.Equalizer('Bars' if self.mode.get() == 'Equalizer' else 'Bass pulse', self.pal.get(), self.gain.get())
+                eff = effects.Equalizer('Bars' if self.mode.get() == 'Equalizer' else 'Bass pulse', self.pal.get(), self.gain.get(),
+                                        self.scheme.get(), self.bgcol.get())
         except Exception as e:
             messagebox.showerror('Reactive', 'Could not start: %s\n\nThe music effects need the "soundcard" and "numpy" packages '
                                  '(installed automatically on start).' % e)
