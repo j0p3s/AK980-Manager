@@ -1635,6 +1635,7 @@ class SystemPage(Page):
         self.upd_btn.pack(anchor='w')
         self.upd_msg = label(soft.body, '', 10, False, C['muted'], C['card'])
         self.upd_msg.pack(anchor='w', pady=(8, 0))
+        self.restart_btn = Btn(soft.body, 'Restart now to finish updating', self.app.restart_app, 'ghost', height=34)
         self.on_show()
 
     def on_show(self):
@@ -1761,10 +1762,16 @@ class SystemPage(Page):
 
         def job():
             r = bootstrap.self_update(force=True)
-            msg = {'updated': ('Updated. Restart the program to use the new version.', C['ok']),
-                   'staged': ('A new version was downloaded. Close the program; it restarts itself updated.', C['ok']),
+            msg = {'updated': ('Updated. Restart the program to use the new version (button below).', C['ok']),
+                   'staged': ('A new version was downloaded. Press the button below, or close the program: it restarts itself updated.', C['ok']),
                    'current': ('You have the newest version.', C['ok']),
                    'skipped': ('Updates are off in a developer checkout.', C['muted']),
                    'offline': ('Could not reach GitHub. Will try again later.', C['warn'])}[r]
-            self.app.post(lambda: (self.upd_msg.configure(text=msg[0], fg=msg[1]), self.upd_btn.set_enabled(True), self.on_show()))
+            def done():
+                self.upd_msg.configure(text=msg[0], fg=msg[1])
+                self.upd_btn.set_enabled(True)
+                if r in ('updated', 'staged'):
+                    self.restart_btn.pack(anchor='w', pady=(8, 0))
+                self.on_show()
+            self.app.post(done)
         threading.Thread(target=job, daemon=True).start()

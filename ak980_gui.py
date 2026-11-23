@@ -506,18 +506,28 @@ class App(tk.Tk):
     def _update_found(self, tag, mode):
         if mode == 'Update automatically':
             if self.streaming or self._idle_seconds() < 300:
-                self._note('Version %s is available; it installs when you are away from the PC.' % tag.lstrip('vV'), [('Update now', self._update_now)])
+                self._note('Version %s is available; it installs when you are away from the PC.' % tag.lstrip('vV'), [('Restart and update now', self._update_now)])
                 self.after(10 * 60 * 1000, lambda: self._update_found(tag, mode))
                 return
             self._update_now(auto=True)
             return
-        self._note('Version %s is available.' % tag.lstrip('vV'), [('Update now', self._update_now)])
+        self._note('Version %s is available.' % tag.lstrip('vV'), [('Restart and update now', self._update_now)])
 
     def _update_now(self, auto=False):
         """Restart the program; at start it installs the newer release and comes back up."""
         if self.streaming and not auto and not messagebox.askyesno('Update', 'An effect is running; the update stops it. Continue?'):
             return
         subprocess.Popen('ping -n 4 127.0.0.1 >nul & start "" "%s"' % sys.executable, shell=True, creationflags=NO_WINDOW, close_fds=True)
+        self.quit_app()
+
+    def restart_app(self):
+        """Close the manager and start it again (a downloaded update is applied while it restarts). The packaged exe's update helper
+        restarts it by itself once it has staged an update, so there it only has to quit; from source it starts a new copy after a pause."""
+        if self.streaming and not messagebox.askyesno('Update', 'An effect is running; the update stops it. Continue?'):
+            return
+        if not getattr(sys, 'frozen', False):
+            cmd = subprocess.list2cmdline([sys.executable] + sys.argv)
+            subprocess.Popen('ping -n 4 127.0.0.1 >nul & start "" ' + cmd, shell=True, creationflags=NO_WINDOW, close_fds=True)
         self.quit_app()
 
     def _live_kb(self):
