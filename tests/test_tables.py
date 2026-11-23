@@ -396,3 +396,12 @@ class TestKeyboardV2(unittest.TestCase):
         self.assertEqual(len(p), 256 + 3 * 240 * 135 * 2)
         self.assertEqual(list(p[:5]), [3, 50, 100, 0, 255])                # count, 100/2, 200/2, last = 0, rest 0xFF
         self.assertEqual(p[256:258], (0xF800).to_bytes(2, 'little'))      # pure red in RGB565
+
+
+class TestNowPlayingParse(unittest.TestCase):
+    def test_accented_title_and_none(self):
+        import live
+        self.assertEqual(live.parse_nowplaying('{"title":"CORAÇÃO CIGANO","artist":"Luan Santana","status":"Playing"}'),
+                         ('CORAÇÃO CIGANO', 'Luan Santana', 'Playing'))
+        self.assertIsNone(live.parse_nowplaying(None))
+        self.assertIsNone(live.parse_nowplaying('{}'))

@@ -205,6 +205,7 @@ def fingerprint(img):
 
 # ---------------------------------------------------------------------------------------------- sources
 _NOWPLAYING_PS = r"""
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 $asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]
@@ -221,7 +222,7 @@ $p = Await ($s.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSyste
 def parse_nowplaying(text):
     """(title, artist, status) from the script's JSON, or None when nothing is playing / the output is not usable."""
     try:
-        d = json.loads(text.strip() or '{}')
+        d = json.loads((text or '').strip() or '{}')
     except ValueError:
         return None
     if not isinstance(d, dict) or not d.get('title'):
@@ -232,7 +233,7 @@ def parse_nowplaying(text):
 def nowplaying():
     """The song Windows reports (System Media Transport Controls: Spotify, browsers, players), or None."""
     try:
-        r = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command', _NOWPLAYING_PS], capture_output=True, text=True,
+        r = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command', _NOWPLAYING_PS], capture_output=True, text=True, encoding='utf-8', errors='replace',
                            timeout=25, creationflags=NO_WINDOW)
         return parse_nowplaying(r.stdout)
     except (OSError, subprocess.SubprocessError):

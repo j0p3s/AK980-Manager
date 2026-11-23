@@ -1140,6 +1140,7 @@ class KeysPage(Page):
         if layers is None:
             return
         save_json(KEYMAP_FILE, self.maps)
+        self._applied = json.dumps(self.maps, sort_keys=True)      # applied: leaving the page must not warn any more
         self._write(layers, 'Keymap applied (both layers)')
 
     def reset(self):
