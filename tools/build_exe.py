@@ -32,6 +32,7 @@ def main():
         sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--windowed', '--name', NAME,
         '--icon', ICON, '--contents-directory', 'lib',
         '--add-data', ICON + os.pathsep + 'assets',
+        '--add-data', os.path.join(ROOT, 'web_keylist.json') + os.pathsep + '.',
         '--hidden-import', '_cffi_backend', '--collect-submodules', 'soundcard',
         '--exclude-module', 'frida', '--exclude-module', 'matplotlib', '--exclude-module', 'scipy',
         '--specpath', os.path.join(ROOT, 'build'), os.path.join(ROOT, 'ak980_gui.py')])
