@@ -379,6 +379,7 @@ class PerKeyPage(Page):
         Palette(row, self.setcur).pack(side='left')
         Btn(row, 'Fill all', self.fill, height=30, size=9).pack(side='left', padx=(20, 6))
         Btn(row, 'Rainbow', self.rainbow, height=30, size=9).pack(side='left', padx=(0, 6))
+        Btn(row, 'Go crazy', self.go_crazy, height=30, size=9).pack(side='left', padx=(0, 6))
         Btn(row, 'Clear all', self.clear, height=30, size=9).pack(side='left', padx=(0, 6))
         Btn(row, 'Import scheme...', self.import_scheme, height=30, size=9).pack(side='right')
         Btn(row, 'Export scheme...', self.export_scheme, height=30, size=9).pack(side='right', padx=6)
@@ -416,6 +417,16 @@ class PerKeyPage(Page):
         for k in keys.KEYS:
             self.colors[k[3]] = rgb_hex(theme_rgb(k[5] / 19.0))
         self._refresh()
+
+    def go_crazy(self):
+        import random
+        import colorsys
+        for k in keys.KEYS:
+            r, g, b = colorsys.hsv_to_rgb(random.random(), random.uniform(0.75, 1.0), 1.0)
+            self.colors[k[3]] = '#%02x%02x%02x' % (int(r * 255), int(g * 255), int(b * 255))
+        self._refresh()
+        save_json(PERKEY_FILE, self.colors)
+        self.app.status_msg('Random colours saved. Press Apply to send them to the keyboard.', 'ok')
 
     def clear(self):
         self.colors = {}

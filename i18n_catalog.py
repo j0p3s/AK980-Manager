@@ -235,6 +235,8 @@ ENTRIES = {
     'Needs the USB cable (the 2.4G dongle cannot read the colours back).': ('Precisa do cabo USB (o recetor 2.4G não consegue ler as cores).', 'Nécessite le câble USB (le dongle 2.4G ne peut pas relire les couleurs).', 'Necesita el cable USB (el receptor 2.4G no puede leer los colores).', 'USB kablosu gerektirir (2.4G alıcı renkleri geri okuyamaz).'),
     'Fill all': ('Preencher tudo', 'Tout remplir', 'Rellenar todo', 'Tümünü doldur'),
     'Rainbow': ('Arco-íris', 'Arc-en-ciel', 'Arcoíris', 'Gökkuşağı'),
+    'Go crazy': ('Loucura total', 'À fond les couleurs', 'Locura total', 'Çılgına dön'),
+    'Random colours saved. Press Apply to send them to the keyboard.': ('Cores aleatórias guardadas. Carregue em Aplicar para as enviar ao teclado.', 'Couleurs aléatoires enregistrées. Appuyez sur Appliquer pour les envoyer au clavier.', 'Colores aleatorios guardados. Pulsa Aplicar para enviarlos al teclado.', 'Rastgele renkler kaydedildi. Klavyeye göndermek için Uygula düğmesine basın.'),
     'Clear all': ('Limpar tudo', 'Tout effacer', 'Borrar todo', 'Tümünü temizle'),
     'Import scheme...': ('Importar esquema...', 'Importer un schéma...', 'Importar esquema...', 'Şema içe aktar...'),
     'Export scheme...': ('Exportar esquema...', 'Exporter le schéma...', 'Exportar esquema...', 'Şema dışa aktar...'),
