@@ -124,6 +124,21 @@ def _open(url, timeout=8):
     return urllib.request.urlopen(req, timeout=timeout)
 
 
+def release_info(tag=None):
+    """(tag, notes) of the latest GitHub release, or of release `tag`; None when offline or on any error."""
+    try:
+        url = 'https://api.github.com/repos/%s/releases/%s' % (REPO, ('tags/' + tag) if tag else 'latest')
+        with _open(url) as r:
+            rel = json.load(r)
+        return str(rel.get('tag_name', '')), str(rel.get('body') or '')
+    except Exception:
+        return None
+
+
+def is_newer(tag, version):
+    return _vtuple(tag) > _vtuple(version)
+
+
 def is_dev_checkout():
     return os.path.exists(os.path.join(APP_DIR, '.git')) or bool(os.environ.get('AK980_NO_UPDATE'))
 

@@ -165,11 +165,39 @@ class Extras(unittest.TestCase):
         self.assertEqual(battery.parse('junk'), [])
         self.assertIn('No AK980', battery.summary([]))
 
+    def test_focus_bar(self):
+        import effects
+        f = effects.FocusBar(1)
+        self.assertEqual(len(f.frame(0)), 1)                       # just started: one key
+        f.t0 -= 61                                                 # time is up: the whole keyboard flashes
+        self.assertTrue(f.frame(0) == {} or len(f.frame(0)) == len(f.all_keys))
+        self.assertIsNotNone(f.finished_at)
+
     def test_gauges_frame(self):
         import effects
         g = effects.Gauges()
         out = g.frame(0)
         self.assertTrue(all(isinstance(k, int) and len(v) == 3 for k, v in out.items()))
+
+
+class Backup(unittest.TestCase):
+    def test_round_trip_and_refusals(self):
+        import backup
+        import zipfile
+        with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as dst:
+            os.makedirs(os.path.join(src, 'profiles'))
+            for rel, text in (('keymap.json', '{}'), ('profiles/p one.json', '[]'), ('notes.txt', 'ignored')):
+                with open(os.path.join(src, rel), 'w') as f:
+                    f.write(text)
+            z = os.path.join(src, 'b.zip')
+            self.assertEqual(backup.make(z, src), 2)                      # notes.txt is not a settings file
+            self.assertEqual(backup.restore(z, dst), 2)
+            self.assertTrue(os.path.exists(os.path.join(dst, 'profiles', 'p one.json')))
+            evil = os.path.join(src, 'evil.zip')
+            with zipfile.ZipFile(evil, 'w') as zz:
+                zz.writestr('../evil.json', '{}')
+            with self.assertRaises(ValueError):
+                backup.check(evil)
 
 
 if __name__ == '__main__':

@@ -45,7 +45,7 @@ class ScreenPage(Page):
         self.text, self.fsize, self.delay = tk.StringVar(value='Hello'), tk.IntVar(value=28), tk.IntVar(value=50)
         top = tk.Frame(self, bg=C['bg'])
         top.pack(fill='x')
-        for text, cmd, kind in (('Add images / GIF...', self.add, 'primary'), ('New blank frame', self.new_frame, 'ghost'),
+        for text, cmd, kind in (('Add images / GIF...', self.add, 'primary'), ('Add video...', self.add_video, 'ghost'), ('New blank frame', self.new_frame, 'ghost'),
                                 ('Duplicate', self.duplicate, 'ghost'), ('Delete', self.remove, 'ghost'),
                                 ('Move up', lambda: self.move(-1), 'ghost'), ('Move down', lambda: self.move(1), 'ghost'),
                                 ('Clear all', self.clear, 'ghost')):
@@ -115,6 +115,43 @@ class ScreenPage(Page):
             return
         for f in filedialog.askopenfilenames(filetypes=[('Images', '*.png *.jpg *.jpeg *.bmp *.gif')]):
             self._load_file(f)
+
+    def add_video(self):
+        """Add the first frames of a video (needs ffmpeg)."""
+        if not self._need_pil():
+            return
+        from tkinter import simpledialog
+        import shutil
+        import videoframes
+        f = filedialog.askopenfilename(filetypes=[('Video', '*.mp4 *.mkv *.mov *.avi *.webm *.m4v *.gif'), ('All files', '*.*')])
+        if not f:
+            return
+        room = ak980.Keyboard.MAX_FRAMES - len(self.frames)
+        if room <= 0:
+            messagebox.showinfo('Screen', 'The screen already has the most frames the keyboard takes (%d).' % ak980.Keyboard.MAX_FRAMES)
+            return
+        fps = simpledialog.askinteger('Video', 'Frames per second to take from the video (1-25).\n\nThe keyboard takes at most %d frames in total, '
+                                      'so %d fps gives %.0f seconds.' % (ak980.Keyboard.MAX_FRAMES, 10, room / 10.0), initialvalue=10,
+                                      minvalue=1, maxvalue=25, parent=self)
+        if not fps:
+            return
+        self.app.status_msg('Reading the video...', 'info')
+        self.update_idletasks()
+        try:
+            files, tmp = videoframes.extract(f, fps, room)
+        except OSError as e:
+            messagebox.showerror('Video', str(e))
+            return
+        try:
+            from PIL import Image
+            delay = fit_delay(1000.0 / fps)
+            for i, p in enumerate(files):
+                with Image.open(p) as im:
+                    self.frames.append(Frame('%s #%d' % (os.path.basename(f), i + 1), im.convert('RGB').resize((W, H)).copy(), delay))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        self._refresh(len(self.frames) - 1)
+        self.app.status_msg('%d video frames added' % len(files), 'ok')
 
     def _load_file(self, f, replace=False):
         if not self._need_pil():
@@ -308,6 +345,12 @@ class ScreenPage(Page):
             return
         imgs = [f.img for f in self.frames]
         delays = [f.delay for f in self.frames]
+        try:                                           # keep the user's own picture: the live screen puts it back after its cards
+            import live
+            os.makedirs(os.path.dirname(live.USER_GIF), exist_ok=True)
+            imgs[0].convert('RGB').save(live.USER_GIF, save_all=True, append_images=[i.convert('RGB') for i in imgs[1:]], duration=delays, loop=0)
+        except Exception:
+            pass
         self.bar.configure(maximum=1, value=0)
         self.up.set_enabled(False)
 

@@ -414,7 +414,7 @@ class PerKeyPage(Page):
 # ------------------------------------------------------------------------------------------------ reactive
 class ReactivePage(Page):
     title, subtitle = 'Reactive', 'Effects driven by your PC: keys that glow when pressed, and music on the keyboard.'
-    MODES = ('Key glow', 'Equalizer', 'Bass pulse', 'System gauges')
+    MODES = ('Key glow', 'Equalizer', 'Bass pulse', 'System gauges', 'Focus timer')
 
     def __init__(self, parent, app):
         super().__init__(parent, app)
@@ -424,6 +424,7 @@ class ReactivePage(Page):
         self.pal = tk.StringVar(value='Classic')
         self.gain = tk.DoubleVar(value=1.0)
         self.scheme = tk.StringVar(value='Gradient')
+        self.focus_min = tk.IntVar(value=25)
         self.bgcol = tk.StringVar(value='Off')
         self.amp = tk.DoubleVar(value=100)
         self.color = (124, 108, 255)
@@ -454,6 +455,7 @@ class ReactivePage(Page):
             'Equalizer': 'Whatever your PC plays becomes a spectrum analyser: bass on the left, treble on the right, '
                          'bars growing up from the bottom row.',
             'Bass pulse': 'The whole keyboard pulses with the bass of the music.',
+            'Focus timer': 'The number row fills up while time passes, then the whole keyboard flashes green. Needs the USB cable.',
             'System gauges': 'CPU load on the function-key row and memory use on the number row, as bars of lit keys (green to red). '
                              'Needs the USB cable.'}[m])
         for w in self.opts.body.winfo_children():
@@ -467,6 +469,9 @@ class ReactivePage(Page):
             Seg(col, effects_styles(), self.style, self._live).pack(anchor='w', pady=(6, 10))
             label(col, 'Single colour', 10, False, C['muted'], C['card']).pack(anchor='w')
             Palette(col, self._set_color).pack(anchor='w', pady=(6, 0))
+        elif m == 'Focus timer':
+            label(b, 'Minutes', 10, False, C['muted'], C['card']).pack(side='left')
+            ttk.Spinbox(b, from_=1, to=240, width=6, textvariable=self.focus_min).pack(side='left', padx=10)
         elif m == 'System gauges':
             label(b, 'Top row (Esc to Delete): CPU load.   Number row (` to Backspace): memory in use.', 10, False, C['muted'], C['card']).pack(anchor='w')
         else:
@@ -520,6 +525,8 @@ class ReactivePage(Page):
                 eff = effects.KeyGlow(self.fade.get(), self.style.get(), self.color)
             elif self.mode.get() == 'System gauges':
                 eff = effects.Gauges()
+            elif self.mode.get() == 'Focus timer':
+                eff = effects.FocusBar(int(self.focus_min.get() or 25))
             else:
                 eff = effects.Equalizer('Bars' if self.mode.get() == 'Equalizer' else 'Bass pulse', self.pal.get(), self.gain.get(),
                                         self.scheme.get(), self.bgcol.get(), int(self.amp.get()))
@@ -534,7 +541,8 @@ class ReactivePage(Page):
         self.btn.kind = 'danger'
         self.btn._draw()
         dev = getattr(eff, 'device', None)
-        hint = ' - CPU on the top row, memory on the number row' if isinstance(eff, effects.Gauges) else ' - press some keys'
+        hint = (' - CPU on the top row, memory on the number row' if isinstance(eff, effects.Gauges)
+                else ' - the number row fills up' if isinstance(eff, effects.FocusBar) else ' - press some keys')
         self.msg.configure(text='Running' + (' - listening to %s' % dev if dev else hint), fg=C['ok'])
         self.app.status_msg('Reactive effect running', 'ok')
 
@@ -1467,6 +1475,15 @@ class SystemPage(Page):
         self.bat_btn.pack(side='left')
         self.bat_msg = label(brow2, '', 10, False, C['muted'], C['card'], justify='left')
         self.bat_msg.pack(side='left', padx=14)
+        bk = Card(self, 'Backup')
+        bk.pack(fill='x', pady=(14, 0))
+        label(bk.body, 'Save everything the program keeps on this PC (keys, macros, lighting, per-key colours, profiles, live screen settings, '
+              'your screen picture) in one file, and bring it back after a reinstall or on another PC.', 9, False, C['muted'], C['card'],
+              wraplength=720, justify='left').pack(anchor='w')
+        bk_row = tk.Frame(bk.body, bg=C['card'])
+        bk_row.pack(fill='x', pady=(10, 0))
+        Btn(bk_row, 'Back up everything...', self.backup_all, 'ghost', height=34).pack(side='left')
+        Btn(bk_row, 'Restore from backup...', self.restore_all, 'ghost', height=34).pack(side='left', padx=10)
         st = Card(self, 'Startup')
         st.pack(fill='x', pady=(14, 0))
         label(st.body, 'Start with Windows, as administrator (Task Scheduler). Lets you turn off the official app\'s autostart: '
@@ -1546,6 +1563,36 @@ class SystemPage(Page):
                 text, ok = 'Could not read it: %s' % e, False
             self.app.post(lambda: (self.bat_msg.configure(text=text, fg=C['ok'] if ok else C['warn']), self.bat_btn.set_enabled(True)))
         threading.Thread(target=job, daemon=True).start()
+
+    def backup_all(self):
+        import backup
+        f = filedialog.asksaveasfilename(defaultextension='.zip', filetypes=[('Backup', '*.zip')], initialfile='AK980 Manager backup.zip')
+        if f:
+            try:
+                n = backup.make(f)
+                self.app.status_msg('Backup saved (%d files)' % n, 'ok')
+            except OSError as e:
+                messagebox.showerror('Backup', 'Could not save the backup: %s' % e)
+
+    def restore_all(self):
+        import backup
+        f = filedialog.askopenfilename(filetypes=[('Backup', '*.zip'), ('All files', '*.*')])
+        if not f:
+            return
+        try:
+            n = len(backup.check(f))
+        except ValueError as e:
+            messagebox.showerror('Restore', 'Cannot use this file: %s.' % e)
+            return
+        if not messagebox.askyesno('Restore', 'Replace your settings with the %d files of this backup?\n\nThe program closes afterwards; start it '
+                                   'again to use them.' % n):
+            return
+        try:
+            backup.restore(f)
+        except OSError as e:
+            messagebox.showerror('Restore', 'Could not restore: %s' % e)
+            return
+        self.app.quit_app()
 
     def sync_clock(self):
         if self.app.require_kb():

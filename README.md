@@ -13,12 +13,13 @@ Windows, Python 3.10+ (Tkinter), Pillow. Licensed under the **GNU GPL v3 or late
 |---|---|
 | **Lighting** | built-in effects (all 19 verified), colour, "colorful" rainbow, brightness (0 = LEDs off), speed, direction |
 | **Per-key** | paint every key with its own colour; import / export the official app's lighting scheme files |
-| **Reactive** | keys that glow when pressed; Music Rhythm equalizer (bar colours, background, amplitude over 2.4G), bass pulse, and system gauges (CPU on the top row, memory on the number row, cable only) |
+| **Reactive** | keys that glow when pressed; Music Rhythm equalizer (bar colours, background, amplitude over 2.4G), bass pulse, system gauges (CPU on the top row, memory on the number row) and a focus timer on the number row (cable only) |
 | **Keys** | remap keys on the **Top** and **Fn** layer to a key, characters of your Windows layout, media, mouse, macro, special function (Show Desktop, Copy, Paste...), PC action (open program / website / file, send text) or key sequence |
 | **Macros** | record keys and mouse clicks, type text, edit the steps (waits, speed), duplicate, import / export; assign on the Keys page |
-| **Screen** | frame editor and GIF import / export for the TFT screen (240x135, up to 140 frames); sync the clock |
+| **Screen** | frame editor, GIF import / export and video import (needs ffmpeg) for the TFT screen (240x135, up to 140 frames); sync the clock |
+| **Live screen** | cards that put themselves on the screen within an upload budget: song playing, next meeting (.ics / calendar link), reminders, focus timer, clock and date in your date format (USB cable) |
 | **Profiles** | save keymap, macros and lighting under a name and switch with one click |
-| **System** | sleep time, key response level, Fn key Momentary / Toggle, sync the keyboard clock, Bluetooth battery level (read-only), start with Windows, tray, updates |
+| **System** | sleep time, key response level, Fn key Momentary / Toggle, sync the keyboard clock, Bluetooth battery level (read-only), back up / restore everything in one file, start with Windows, tray, update notice |
 
 ## Install and run
 

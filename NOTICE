@@ -8,4 +8,6 @@ only protocol facts were taken from its documentation and source comments, no co
   * the rule that the Fn key must never be remapped
   * the weekday byte (offset 10, 0 = Sunday) of the clock packet
   * the byte sequences that start a firmware update (the packet guard refuses to send them)
+  * the design of the live screen (upload budget of 8 / 24 / 48 a day, one waiting card, priorities, return to the user's picture)
+  * the colour read-back command (04 F5) and its quirks (experimental, not in the interface yet)
 Thank you to its author.

@@ -14,8 +14,11 @@ import subprocess
 import sys
 import threading
 import tkinter as tk
+from tkinter import messagebox
 
 import ak980
+import live
+import live_page
 import pages
 import pcactions
 import profiles
@@ -25,7 +28,7 @@ import tray
 from theme import C, Btn, label
 
 NAV = [('Lighting', '☀', pages.LightingPage), ('Per-key', '▦', pages.PerKeyPage), ('Reactive', '♫', pages.ReactivePage),
-       ('Keys', '⌨', pages.KeysPage), ('Macros', '≣', pages.MacrosPage), ('Screen', '▭', screen_page.ScreenPage),
+       ('Keys', '⌨', pages.KeysPage), ('Macros', '≣', pages.MacrosPage), ('Screen', '▭', screen_page.ScreenPage), ('Live screen', '◔', live_page.LivePage),
        ('Profiles', '◧', profiles.ProfilesPage), ('System', '⚙', pages.SystemPage)]
 NAV_GROUPS = {'Lighting': 'LIGHTING', 'Keys': 'KEYS AND MACROS', 'Screen': 'DEVICE'}      # section heading above these items
 NO_WINDOW = 0x08000000
@@ -165,12 +168,19 @@ class App(tk.Tk):
         self.cv = threading.Condition()
         self._q = queue.Queue()
         self.macros = pages.load_json(pages.MACRO_FILE, [])
+        self.live_settings = live.load_settings()
+        self.live_worker = None
         self.light = {'effect': 'Static', 'rgb': [255, 0, 0], 'colorful': False, 'bright': 3, 'speed': 3, 'direction': 0}
         self.light.update(pages.load_json(pages.LIGHT_FILE, {}))
         self._build()
         threading.Thread(target=self._worker, daemon=True).start()
+        self.live_worker = live.Worker(self.live_settings, self._live_upload, self._live_restore)
+        self.live_worker.start()
         self.tray = tray.Tray(_resource('assets/icon.ico'), 'Ajazz AK980 V2 Manager', lambda: self.post(self.restore), lambda: self.post(self.quit_app))
         self.tray.start()
+        self.after(4000, self._announce_update)
+        if getattr(sys, 'frozen', False):
+            self.after(25000, self._check_update)
         self.pc_listener = pcactions.Listener(lambda n: self.post(self._pc_key, n))
         self.pc_listener.start()
         self.protocol('WM_DELETE_WINDOW', self._on_x)
@@ -234,6 +244,7 @@ class App(tk.Tk):
         self.h_sub.pack(anchor='w')
         self.pill = tk.Canvas(head, width=190, height=30, bg=C['bg'], highlightthickness=0)
         self.pill.pack(side='right')
+        self.note = tk.Frame(main, bg='#14243a', highlightbackground=C['accent'], highlightthickness=1)
         self.banner = tk.Frame(main, bg='#3a2a14', highlightbackground=C['warn'], highlightthickness=1)
         label(self.banner, 'The official AJAZZ app is running. It blocks this program and re-applies its own settings.', 10,
               False, C['warn'], '#3a2a14').pack(side='left', padx=14, pady=8)
@@ -365,6 +376,83 @@ class App(tk.Tk):
         self.status_msg('Official app closed. Its saved profile is no longer applied.', 'ok')
 
     # ------------------------------------------------------------------ lighting (latest write wins)
+    # ---- in-app update notice (no Windows notification: everything stays in this window)
+    def _note(self, text, buttons):
+        """Show the blue notice bar under the header: text plus buttons [(label, command)]; the last button always dismisses it."""
+        for w in self.note.winfo_children():
+            w.destroy()
+        label(self.note, text, 10, False, C['text'], '#14243a').pack(side='left', padx=14, pady=8)
+        for txt, cmd in reversed(buttons + [('Dismiss', None)]):          # packed from the right: Dismiss ends up at the far right
+            def click(c=cmd):
+                self.note.pack_forget()
+                if c:
+                    c()
+            Btn(self.note, txt, click, 'primary' if cmd else 'ghost', height=28, size=9).pack(side='right', padx=(0, 10), pady=6)
+        if not self.note.winfo_ismapped():
+            self.note.pack(fill='x', padx=28, pady=(4, 0), before=self.content)
+
+    def _announce_update(self):
+        """After an update, say once which version is now running."""
+        try:
+            import appsettings
+            from version import VERSION
+            last = appsettings.get('last_version')
+            if last != VERSION:
+                appsettings.set('last_version', VERSION)
+                if last:
+                    self._note('Updated to version %s.' % VERSION, [("What's new", self._whats_new)])
+        except Exception:
+            pass
+
+    def _whats_new(self):
+        import bootstrap
+        from version import VERSION
+
+        def work():
+            info = bootstrap.release_info('v' + VERSION)
+            text = (info[1].strip() if info and info[1].strip() else 'The release notes could not be loaded (offline?).')[:1800]
+            self.post(lambda: messagebox.showinfo("What's new in %s" % VERSION, text))
+        threading.Thread(target=work, daemon=True).start()
+
+    def _check_update(self):
+        """Packaged program: look for a newer release now and then and offer it inside the window (the update itself is the one the
+        program already does at start: it downloads, verifies the checksum, swaps its folder and restarts)."""
+        import bootstrap
+        from version import VERSION
+
+        def work():
+            info = bootstrap.release_info()
+            if info and bootstrap.is_newer(info[0], VERSION):
+                self.post(lambda: self._note('Version %s is available.' % info[0].lstrip('vV'), [('Update now', self._update_now)]))
+        threading.Thread(target=work, daemon=True).start()
+        self.after(6 * 3600 * 1000, self._check_update)
+
+    def _update_now(self):
+        """Restart the program; at start it installs the newer release and comes back up."""
+        if self.streaming and not messagebox.askyesno('Update', 'An effect is running; the update stops it. Continue?'):
+            return
+        subprocess.Popen('ping -n 4 127.0.0.1 >nul & start "" "%s"' % sys.executable, shell=True, creationflags=NO_WINDOW, close_fds=True)
+        self.quit_app()
+
+    def _live_kb(self):
+        kb = self.kb
+        if kb is None or getattr(kb, 'wireless', False):
+            raise OSError('the screen needs the USB cable')
+        return kb
+
+    def _live_upload(self, img):
+        self._live_kb().upload_screen([img], [100])
+
+    def _live_restore(self):
+        """Put the user's own screen picture back (the animation saved when they uploaded it on the Screen page)."""
+        from PIL import Image, ImageSequence
+        if not os.path.exists(live.USER_GIF):
+            raise OSError('no picture of your own was saved yet (upload one on the Screen page)')
+        with Image.open(live.USER_GIF) as g:
+            frames = [f.convert('RGB').copy() for f in ImageSequence.Iterator(g)]
+            delays = [max(2, int(f.info.get('duration', 100))) for f in ImageSequence.Iterator(g)]
+        self._live_kb().upload_screen(frames, delays)
+
     def save_macros(self):
         pages.save_json(pages.MACRO_FILE, self.macros)
 
@@ -422,6 +510,8 @@ class App(tk.Tk):
         self._close()
 
     def _close(self):
+        if self.live_worker:
+            self.live_worker.stop()
         self.tray.stop()
         self.pc_listener.stop()
         r = self.pages['Reactive'].runner

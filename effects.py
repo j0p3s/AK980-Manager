@@ -243,6 +243,36 @@ class Gauges:
         return out
 
 
+class FocusBar:
+    """Focus timer on the keys: the number row fills up (orange to green) over `minutes`, then the whole keyboard flashes green.
+    Wired only (per-key real-time stream)."""
+
+    def __init__(self, minutes=25):
+        self.total = max(1, minutes) * 60.0
+        self.t0 = time.time()
+        self.cells = sorted((k[5], k[3]) for k in keys.KEYS if k[4] == 1)
+        self.all_keys = [k[3] for k in keys.KEYS]
+        self.finished_at = None
+
+    def remaining(self):
+        return max(0.0, self.total - (time.time() - self.t0))
+
+    def frame(self, t):
+        el = time.time() - self.t0
+        if el >= self.total:
+            if self.finished_at is None:
+                self.finished_at = time.time()
+            if time.time() - self.finished_at < 10:                       # flash for 10 seconds, then go dark
+                return {li: (0, 255, 80) for li in self.all_keys} if int((time.time() - self.finished_at) * 2) % 2 == 0 else {}
+            return {}
+        n = len(self.cells)
+        lit = int(el / self.total * n) + 1
+        out = {}
+        for i, (_, li) in enumerate(self.cells[:lit]):
+            out[li] = rgb(0.07 + 0.26 * i / max(1, n - 1), 1, 1)
+        return out
+
+
 # ---------------------------------------------------------------------------------------------- runner
 class Runner:
     """Streams `effect.frame(t)` to the keyboard on a background thread until stop()."""

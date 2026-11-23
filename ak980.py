@@ -387,6 +387,36 @@ class Keyboard:
                       max(0, min(5, brightness)), max(0, min(5, speed)), direction & 1, 0, 0, 0xAA, 0x55])
         self.transaction(bytes([0x04, 0x18]), bytes([0x04, 0x13, 0, 0, 0, 0, 0, 0, 1]), body, bytes([0x04, 0xF0]))
 
+    # Colours the keyboard is showing right now (command 04 F5; protocol from Keymotion's notes, Apache-2.0 / MIT). EXPERIMENTAL: not yet
+    # run on this keyboard. The header must announce 9 data packets (a count of 0 can wedge the session); the answer is 9 reports of
+    # 64 bytes holding [light index, R, G, B] x 16, where red is reported as 2*r mod 256 (its top bit is lost); the session ends with 04 02.
+    @staticmethod
+    def parse_colors(table):
+        """[(light_index, (r_byte, g, b))] from a read-back table; empty entries are skipped. r_byte is the raw red byte (see above)."""
+        return [(table[i], (table[i + 1], table[i + 2], table[i + 3])) for i in range(0, len(table) - 3, 4) if any(table[i:i + 4])]
+
+    def read_colors(self, timeout=2.0):
+        """Raw read-back table (576 bytes) of the colours on the keys; experimental, see the note above."""
+        with self.lock:
+            h = self._open()
+            try:
+                self._xfer(h, bytes([0x04, 0xF5, 0, 0, 0, 0, 0, 0, 9]))
+                t0 = time.time()
+                table = b''
+                while time.time() - t0 < timeout and len(table) < 576:
+                    rd = ctypes.create_string_buffer(65)
+                    hid.HidD_GetFeature(h, rd, 65)
+                    r = rd.raw[1:]
+                    if r[0] == 0x04 and r[1] in (0xF5, 0x02):          # an echo / acknowledgement, not data
+                        time.sleep(0.003)
+                        continue
+                    table += r
+                    time.sleep(0.003)
+                self._xfer(h, bytes([0x04, 0x02]))
+            finally:
+                k32.CloseHandle(h)
+        return table[:576]
+
 
 DONGLE_PID = 0xFEFE
 
