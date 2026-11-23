@@ -662,9 +662,11 @@ class KeysPage(Page):
         mods = tk.Frame(b, bg=C['card'])
         self.mods_frame = mods
         mods.pack(fill='x', pady=(10, 0))
-        label(mods, 'With modifiers', 10, False, C['muted'], C['card']).pack(side='left', padx=(0, 10))
-        for m in MODS:
-            Toggle(mods, MOD_NAMES[m], self.mod_vars[m], command=self._preview).pack(side='left', padx=(0, 12))
+        label(mods, 'With modifiers', 10, False, C['muted'], C['card']).pack(side='left', anchor='n', padx=(0, 14), pady=(4, 0))
+        grid = tk.Frame(mods, bg=C['card'])
+        grid.pack(side='left')
+        for i, m in enumerate(MODS):                   # two rows, so the last toggle is never cut off
+            Toggle(grid, MOD_NAMES[m], self.mod_vars[m], command=self._preview).grid(row=i // 4, column=i % 4, sticky='w', padx=(0, 22), pady=3)
         self.target.bind('<<ComboboxSelected>>', lambda e: self._preview())
         box = tk.Frame(b, bg=C['card2'], highlightthickness=1, highlightbackground=C['line'])
         box.pack(fill='x', pady=(14, 0))
@@ -1069,14 +1071,32 @@ for _k in keys.KEYS:
 USAGE_NAMES.update({224: 'Ctrl', 225: 'Shift', 226: 'Alt', 227: 'Win', 228: 'Right Ctrl', 229: 'Right Shift', 230: 'Alt Gr', 231: 'Right Win',
                     41: 'Esc', 42: 'Backspace', 43: 'Tab', 40: 'Enter', 44: 'Space', 57: 'Caps Lock', 73: 'Insert', 77: 'End', 70: 'Print Screen',
                     101: 'Menu', 88: 'Keypad Enter', 53: '` ~', 100: 'ISO key'})
+SPECIAL_USAGES = {224, 225, 226, 227, 228, 229, 230, 231, 41, 42, 43, 40, 44, 57, 73, 77, 70, 101, 88}
 MOUSE_NAMES = {1: 'Left click', 2: 'Right click', 4: 'Middle click'}
 MACRO_SLOTS = 100               # directory slots in the keyboard's macro table
 
 
-def event_label(e):
+def layout_key_names():
+    """usage -> what the key types on the ACTIVE Windows layout (letters as capitals, dead keys marked), for readable step lists."""
+    rev, dead = {}, {}
+    for ch in [chr(c) for c in range(33, 127)] + list('çÇºª´`¨~^'):
+        st = layout.type_steps(ch)
+        if len(st) == 1 and not st[0][1] and not st[0][2]:
+            rev.setdefault(st[0][0], ch.upper() if ch.isalpha() else ch)
+        elif len(st) == 2 and st[1][0] == layout.SPACE and not st[0][1] and not st[0][2]:
+            dead.setdefault(st[0][0], ch + ' (dead key)')
+    for u, n in dead.items():
+        rev.setdefault(u, n)
+    return rev
+
+
+def event_label(e, names=None):
     usage, down, delay = e[:3]
     mouse = len(e) > 3 and e[3]
-    name = MOUSE_NAMES.get(usage, 'button %d' % usage) if mouse else USAGE_NAMES.get(usage, 'key %d' % usage)
+    if mouse:
+        name = MOUSE_NAMES.get(usage, 'button %d' % usage)
+    else:
+        name = USAGE_NAMES.get(usage) if usage in SPECIAL_USAGES else (names or {}).get(usage, USAGE_NAMES.get(usage, 'key %d' % usage))
     return '%-14s %-8s wait %d ms' % (name, 'press' if down else 'release', delay)
 
 
@@ -1097,7 +1117,7 @@ class MacrosPage(Page):
         body.pack(fill='both', expand=True)
         left = Card(body, 'Your macros')
         left.pack(side='left', fill='y', padx=(0, 12))
-        self.lb = listbox(left.body, 16, width=34)
+        self.lb = listbox(left.body, 11, width=32)
         self.lb.pack(fill='both', expand=True)
         self.lb.bind('<<ListboxSelect>>', self.pick)
         r1 = tk.Frame(left.body, bg=C['card'])
@@ -1123,25 +1143,26 @@ class MacrosPage(Page):
         self.name.pack(side='left', padx=10)
         self.rec_btn = Btn(row, 'Record keys', self.toggle_record, 'primary', height=34, width=130)
         self.rec_btn.pack(side='right')
-        self.rec_msg = label(top.body, 'Record: press the button, use the keys and mouse clicks in any other program, then come back and press '
-                             'Stop. Keys pressed while this window is in front are ignored.', 9, False, C['muted'], C['card'],
-                             justify='left', wraplength=520)
-        self.rec_msg.pack(anchor='w', pady=(8, 0))
+        self.rec_msg = label(top.body, 'Record: press the button, use keys and clicks in another program, then come back and press Stop.',
+                             9, False, C['muted'], C['card'], justify='left', wraplength=560)
+        self.rec_msg.pack(anchor='w', pady=(6, 0))
         trow = tk.Frame(top.body, bg=C['card'])
         trow.pack(fill='x', pady=(12, 0))
         label(trow, 'Type text', 10, False, C['muted'], C['card']).pack(side='left')
         self.text = ttk.Entry(trow, width=34)
         self.text.pack(side='left', padx=10)
-        Btn(trow, 'Add to steps', self.add_text, 'ghost', height=30, width=110).pack(side='left')
         self.delay = tk.IntVar(value=40)
-        Slider(top.body, 'Delay between typed keys', self.delay, 10, 500, 10, width=300, unit=' ms').pack(anchor='w', pady=(10, 0))
-        label(top.body, 'Typed like your Windows layout: capitals, symbols, accents. Mouse: {click} {rightclick} {middleclick}; '
-              '{wait 500} adds a pause; {{ and }} are literal braces.', 9, False, C['muted'], C['card'], justify='left',
-              wraplength=520).pack(anchor='w', pady=(6, 0))
+        Btn(trow, 'Add to steps', self.add_text, 'ghost', height=30, width=110).pack(side='left')
+        label(trow, 'Key delay', 10, False, C['muted'], C['card']).pack(side='left', padx=(14, 4))
+        ttk.Spinbox(trow, from_=10, to=500, increment=10, width=5, textvariable=self.delay).pack(side='left')
+        label(trow, 'ms', 10, False, C['muted'], C['card']).pack(side='left', padx=(3, 0))
+        label(top.body, 'Typed like your Windows layout (capitals, symbols, accents). Extras: {click} {rightclick} {middleclick} '
+              '{wait 500}; {{ and }} are literal braces.', 9, False, C['muted'], C['card'], justify='left',
+              wraplength=560).pack(anchor='w', pady=(6, 0))
 
         steps = Card(right, 'Steps')
-        steps.pack(fill='both', expand=True, pady=12)
-        self.steps = listbox(steps.body, 10, selectmode='extended')
+        steps.pack(fill='both', expand=True, pady=10)
+        self.steps = listbox(steps.body, 8, selectmode='extended')
         self.steps.configure(font=('Consolas', 10))
         self.steps.pack(fill='both', expand=True)
         self.summary = label(steps.body, '', 10, False, C['muted'], C['card'])
@@ -1156,27 +1177,38 @@ class MacrosPage(Page):
         self.wait.pack(side='left')
         Btn(tools, 'Set on selected', self.set_wait, 'ghost', height=30, width=120).pack(side='left', padx=6)
         self.speed = tk.DoubleVar(value=1.0)
-        Slider(steps.body, 'Speed (all waits)', self.speed, 0.25, 4.0, 0.25, width=300, fmt='%.2f', unit='x').pack(anchor='w', pady=(10, 0))
-        Btn(steps.body, 'Apply speed', self.apply_speed, 'ghost', height=30, width=110).pack(anchor='w', pady=(6, 0))
+        t2 = tk.Frame(steps.body, bg=C['card'])
+        t2.pack(fill='x', pady=(8, 0))
+        label(t2, 'Speed', 10, False, C['muted'], C['card']).pack(side='left', padx=(0, 4))
+        ttk.Spinbox(t2, from_=0.25, to=4.0, increment=0.25, width=5, format='%.2f', textvariable=self.speed).pack(side='left')
+        label(t2, 'x   (2 = twice as fast)', 9, False, C['muted'], C['card']).pack(side='left', padx=(3, 10))
+        Btn(t2, 'Apply to all waits', self.apply_speed, 'ghost', height=30, width=140).pack(side='left')
 
         foot = tk.Frame(right, bg=C['bg'])
         foot.pack(fill='x')
         Btn(foot, 'Save macro', self.save, 'primary', height=38, width=130).pack(side='left')
         Btn(foot, 'Save and send to keyboard', self.save_and_send, 'ghost', height=38, width=210).pack(side='left', padx=10)
-        label(foot, 'Then assign it to a key on the Keys page (Make it: Macro) and press Apply there.', 9, False, C['muted']).pack(side='left', padx=6)
+        label(self, 'Then assign the macro to a key on the Keys page (Make it: Macro) and press Apply there.', 9, False, C['muted']).pack(anchor='w', pady=(8, 0))
         self._refresh()
         self._show_steps()
+
+    def _delay(self):
+        try:
+            return max(10, min(500, int(self.delay.get())))
+        except (tk.TclError, ValueError):
+            return 40
 
     # ---- steps
     def _show_steps(self):
         self.steps.delete(0, 'end')
+        names = layout_key_names()
         for i, e in enumerate(self.events):
-            self.steps.insert('end', '%3d  %s' % (i + 1, event_label(e)))
+            self.steps.insert('end', '%3d  %s' % (i + 1, event_label(e, names)))
         self.summary.configure(text=events_summary(self.events) if self.events else 'No steps yet: record keys, type some text or load a macro.')
 
     def add_text(self):
         t = self.text.get()
-        ev = macro_events(t, max(10, int(self.delay.get())))
+        ev = macro_events(t, self._delay())
         if not ev:
             messagebox.showerror('Macro', 'Type some text first.')
             return
@@ -1212,7 +1244,12 @@ class MacrosPage(Page):
             self.steps.selection_set(i)
 
     def apply_speed(self):
-        f = self.speed.get()
+        try:
+            f = float(self.speed.get())
+        except (tk.TclError, ValueError):
+            return
+        if f <= 0:
+            return
         self.events = [(e[0], e[1], max(10, min(65535, int(e[2] / f)))) + tuple(e[3:]) for e in self.events]
         self.speed.set(1.0)
         self._show_steps()
@@ -1292,7 +1329,7 @@ class MacrosPage(Page):
         if not n or not self.events:
             messagebox.showerror('Macro', 'Give the macro a name and at least one step.')
             return False
-        m = {'name': n, 'delay': max(10, int(self.delay.get())), 'events': [list(e) for e in self.events]}
+        m = {'name': n, 'delay': self._delay(), 'events': [list(e) for e in self.events]}
         m['text'] = 'Steps: ' + events_summary(self.events)
         same = [i for i, x in enumerate(self.app.macros) if x['name'] == n]
         if self.cur is not None and self.cur < len(self.app.macros) and (not same or self.cur in same):

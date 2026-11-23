@@ -11,12 +11,14 @@ Windows, Python 3.10+ (Tkinter), Pillow. Licensed under the **GNU GPL v3 or late
 
 | Tab | What it does |
 |---|---|
-| **Lighting** | built-in effects, colour, "colorful" rainbow, brightness, speed, direction |
-| **Keys** | remap keys on the **Top** and **Fn** layer to a key, media key, modifier or macro; reset to defaults |
-| **Macros** | text-typing macros (letters, digits, space) with a delay; assigned on the Keys tab |
-| **Per-key** | paint every key with its own colour (user lighting) |
-| **Screen** | upload PNG/JPG/GIF frames (240×135, up to 140) to the TFT screen; sync the clock |
-| **System** | sleep time, key response level, Fn key Momentary / Toggle |
+| **Lighting** | built-in effects (all 19 verified), colour, "colorful" rainbow, brightness (0 = LEDs off), speed, direction |
+| **Per-key** | paint every key with its own colour; import / export the official app's lighting scheme files |
+| **Reactive** | keys that glow when pressed; Music Rhythm equalizer (bar colours, background, amplitude over 2.4G) and bass pulse |
+| **Keys** | remap keys on the **Top** and **Fn** layer to a key, characters of your Windows layout, media, mouse, macro, special function (Show Desktop, Copy, Paste...), PC action (open program / website / file, send text) or key sequence |
+| **Macros** | record keys and mouse clicks, type text, edit the steps (waits, speed), duplicate, import / export; assign on the Keys page |
+| **Screen** | frame editor and GIF import / export for the TFT screen (240x135, up to 140 frames); sync the clock |
+| **Profiles** | save keymap, macros and lighting under a name and switch with one click |
+| **System** | sleep time, key response level, Fn key Momentary / Toggle, start with Windows, tray, updates |
 
 ## Install and run
 
@@ -47,16 +49,11 @@ Use as a library: `import ak980; kb = ak980.Keyboard(); kb.set_lighting('Spectru
 ## Limitations
 
 * Over the 2.4G dongle the screen editor, key glow and Bass pulse are not available (the official app does not offer them there either); Bluetooth is not supported.
-* Macros: typed the way your Windows layout types them (capitals, symbols, AltGr, accents); mouse clicks with {click} / {rightclick} / {middleclick} / {wait 500}; macro play modes: once, N times, until pressed again, while held. PC actions (open program / website / file, send text) work while the manager is running.
-* Lighting effect ids beyond Static, Spectrum, Outward and Rolling are inferred from the list order; "LED Off" is not
-  implemented.
-* **Real-time Lighting and Music Rhythm are not supported.** The stream format is known (`04 20`, per-key colours at ~20 fps,
-  see docs/PROTOCOL.md) but on the tested keyboard even the official app's Real-time page only produced black frames, and
-  streaming frames from here did not light the keyboard.
-* The Fn Momentary/Toggle switch is implemented from a capture but was not yet checked by pressing Fn on the keyboard.
+* Macros: text is typed the way your Windows layout types it; recorded macros replay the exact keys and clicks (mouse movement is not recorded). The keyboard's macro memory limit is not known: if a long macro is cut off, shorten it. PC actions work while the manager is running.
+* Real-time lighting over the cable (key glow, bass pulse) is implemented from captures; Music Rhythm "Bars" over 2.4G uses the keyboard's own equaliser.
+* Key response level 1 and the keyboard clock's effect on the screen time were not checked by eye.
 * Profiles are stored on the PC (Profiles page), not in the keyboard.
-* Not implemented: the screen frame editor,
-  firmware update, Reset / Factory Reset (deliberately).
+* Not implemented: firmware update, Reset / Factory Reset (deliberately).
 * Writes take time: a per-key / macro / keymap update needs a few seconds; a screen upload with many frames can take minutes.
 
 ## Repository layout

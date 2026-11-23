@@ -1,7 +1,7 @@
 # Handoff — AK980 Manager
 
-Last updated: 2026-11-22 (third long session: key functions, macros, profiles, screen editor, lighting schemes, 2.4G dongle finished, v1.0.6 + v1.0.7 released).
-Repository: https://github.com/j0p3s/AK980-Manager · License: GPL-3.0-or-later · latest release **v1.0.7**.
+Last updated: 2026-11-23 (fourth session: effects + shortcuts verified, Music Rhythm colours over 2.4G, Macros page rewrite with recorder, GUI nav sections + Ctrl+1..8, v2.0.0 released).
+Repository: https://github.com/j0p3s/AK980-Manager · License: GPL-3.0-or-later · latest release **v2.0.0**.
 
 ## What this is
 English control software for the user's **AJAZZ AK980 V2 PRO** keyboard (Sonix `0C45:8009` wired, `0C45:FEFE` 2.4G dongle), because the official app is Chinese-only.
@@ -76,7 +76,7 @@ the user to make **specific assignments** in its UI and Apply once, then decode 
 Its English strings: `research/ak980_extract/en_strings.txt`. Always rebuild the captured bytes offline, then verify on hardware (the user presses keys and reports).
 
 ## Open work / ideas
-0. **Macros page rewritten 2026-11-23 (UNTESTED on hardware and never seen by eye)**: macros are now event lists (`events` in the macro dict, `pages.events_of`; old text macros still work), step list with delete / wait / speed, key+mouse recorder (`recorder.py`, low-level hooks, ignores input while the manager window is in front), duplicate, import/export (.json), "Save and send to keyboard". To verify: record a macro, send it, assign it to a key, press the key; check a long macro (the keyboard's macro memory limit is unknown).
+0. **Macros page rewritten 2026-11-23 (seen on screen and the text -> steps -> save -> delete flow clicked through; the RECORDER and sending a recorded macro to the keyboard are NOT yet tested with real key presses - the recorder ignores injected input, so it must be tested by a human typing)**: macros are now event lists (`events` in the macro dict, `pages.events_of`; old text macros still work), step list with delete / wait / speed, key+mouse recorder (`recorder.py`, low-level hooks, ignores input while the manager window is in front), duplicate, import/export (.json), "Save and send to keyboard". To verify: record a macro, send it, assign it to a key, press the key; check a long macro (the keyboard's macro memory limit is unknown).
 1. GUI over the dongle was clicked through 2026-11-22 (Lighting, Per-key, Keys Fn remap + reset, System Apply, Reactive Equalizer with music, Macros/Screen/Profiles render). Still to eyeball: Fn Toggle via the System page on the cable, Macros page assign flow over the dongle.
 2. **2.4G leftovers**: none planned (key glow / Bass pulse / screen are not offered by the official app over the dongle). Unobserved: the clock packet's effect on the screen time; mouse events inside macros over the dongle (length rule only confirmed for keyboard events).
 3. Real-time Lighting scheme export (only the per-key scheme was captured). Music Rhythm over 2.4G now has the official app's bar colours + background (2026-11-23); the app's Amplitude slider is not exposed in the GUI (header byte exists, `music_frame(amplitude=)`).

@@ -26,6 +26,7 @@ from theme import C, Btn, label
 NAV = [('Lighting', '☀', pages.LightingPage), ('Per-key', '▦', pages.PerKeyPage), ('Reactive', '♫', pages.ReactivePage),
        ('Keys', '⌨', pages.KeysPage), ('Macros', '≣', pages.MacrosPage), ('Screen', '▭', screen_page.ScreenPage),
        ('Profiles', '◧', profiles.ProfilesPage), ('System', '⚙', pages.SystemPage)]
+NAV_GROUPS = {'Lighting': 'LIGHTING', 'Keys': 'KEYS AND MACROS', 'Screen': 'DEVICE'}      # section heading above these items
 NO_WINDOW = 0x08000000
 
 
@@ -182,10 +183,13 @@ class App(tk.Tk):
         label(logo, 'AK980', 18, True, C['text'], C['side']).pack(anchor='w')
         label(logo, 'V2 PRO manager', 9, False, C['muted'], C['side']).pack(anchor='w')
         self.nav = {}
-        for name, icon, cls in NAV:
+        for i, (name, icon, cls) in enumerate(NAV):
+            if name in NAV_GROUPS:
+                label(side, NAV_GROUPS[name], 8, True, C['muted'], C['side']).pack(anchor='w', padx=18, pady=(14 if i else 0, 4))
             n = NavItem(side, name, icon, lambda name=name: self.show(name))
             n.pack(fill='x')
             self.nav[name] = n
+            self.bind_all('<Control-Key-%d>' % (i + 1), lambda e, name=name: self.show(name))        # Ctrl+1 .. Ctrl+8
         label(side, 'Unofficial - not affiliated\nwith AJAZZ', 8, False, C['muted'], C['side'], justify='left').pack(side='bottom', anchor='w', padx=18, pady=14)
 
         main = tk.Frame(self, bg=C['bg'])
