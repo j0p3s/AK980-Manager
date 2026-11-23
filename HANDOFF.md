@@ -13,7 +13,7 @@ The user is Portuguese (**Portuguese Windows layout**, ANSI keyboard, no Print S
 ## State (all verified on the real keyboard unless noted)
 | Area | Status |
 |---|---|
-| Lighting effects / colour / brightness / speed | works; effect ids 1, 8, 9, 11 seen from the app, the rest inferred; direction byte and "LED Off" untested |
+| Lighting effects / colour / brightness / speed | works; all 19 effect ids, colourful mode, direction byte, speed and brightness 0-5 verified on the cable (2026-11-23, `tools/verify_effects.py`) |
 | Keys page | Key (+modifiers), characters of the **active Windows layout** (`layout.py`: AltGr, ISO key, dead accents), Media, Mouse (buttons, wheel), Macro with play modes (once / N times / toggle / hold), Special (Disable key, Show Desktop, Lock, Close Window, Switch Windows, My Computer, Copy, Paste, Cut), PC action, Sequence (Multi-Key, up to 3 tapped keys), Modifiers. RESULT box says what a key will type |
 | PC actions (`pcactions.py`) | Open program / website / file, Send text: key entry `[05 02 N]`, keyboard sends report `05 00 N 00` on the vendor interface, the running manager acts. Works elevated and not |
 | Macros | text typed like the user's layout (capitals, symbols, AltGr, accents), `{click} {rightclick} {middleclick}`, `{wait 500}`; macro table must be >= 10 packets (mouse events are ignored otherwise) |
@@ -79,5 +79,5 @@ Its English strings: `research/ak980_extract/en_strings.txt`. Always rebuild the
 1. GUI over the dongle was clicked through 2026-11-22 (Lighting, Per-key, Keys Fn remap + reset, System Apply, Reactive Equalizer with music, Macros/Screen/Profiles render). Still to eyeball: Fn Toggle via the System page on the cable, Macros page assign flow over the dongle.
 2. **2.4G leftovers**: none planned (key glow / Bass pulse / screen are not offered by the official app over the dongle). Unobserved: the clock packet's effect on the screen time; mouse events inside macros over the dongle (length rule only confirmed for keyboard events).
 3. Real-time Lighting scheme export (only the per-key scheme was captured), more Music Rhythm modes of the official app.
-4. Still unverified on hardware: effect ids 2-7, 10, 12+, "LED Off", direction byte, key response level 1, the screen clock, My Computer/Copy/Paste/Cut shortcuts, bass pulse (cable). Music Rhythm Equalizer in the GUI is verified over the dongle only.
+4. Still unverified on hardware: key response level 1, the screen clock, My Computer/Copy/Paste/Cut shortcuts, bass pulse (cable). Music Rhythm Equalizer in the GUI is verified over the dongle only.
 5. Pages now scroll (ScrollHost in ak980_gui.py) when taller than the window, e.g. Keys on small screens. Polish left: high-DPI scaling was deliberately NOT done (fixed-size widgets; the program runs DPI-virtualised, fine but slightly soft - needs a visual pass on a scaled screen), on-screen keycap legends are ANSI, the GUI's look was never seen by the assistant (ask the user for feedback). Done in 1.0.6: X-button setting (System > Window, `appsettings.py`), tests (`python -m unittest discover -s tests`).

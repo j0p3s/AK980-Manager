@@ -17,7 +17,7 @@ from ctypes import wintypes as w
 
 VID, PID, IFACE = 0x0C45, 0x8009, 'mi_03'
 
-EFFECTS = [  # id = index + 1 (1, 8, 9, 11 seen from the official app, the rest inferred from the list order)
+EFFECTS = [  # id = index + 1 (all 19 verified on the cable keyboard 2026-11-23 with tools/verify_effects.py)
     'Static', 'SingleOn', 'SingleOff', 'Glittering', 'Fluttering', 'Colourful', 'Breath',
     'Spectrum', 'Outward', 'Scrolling', 'Rolling', 'Rotating', 'Explode', 'Launch',
     'Ripples', 'Flowing', 'Pulsating', 'Tilt', 'Shuttle',
