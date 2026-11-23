@@ -16,6 +16,8 @@ import ctypes, queue, threading, time
 from ctypes import wintypes as w
 
 VID, PID, IFACE = 0x0C45, 0x8009, 'mi_03'
+NEW_FIRMWARE_PID = 0x8039           # what the keyboard reports over USB after the 'LED v2 Firmware 769' update: the cable protocol changed (see HANDOFF)
+WIRED_PIDS = (0x8009,)
 
 EFFECTS = [  # id = index + 1 (all 19 verified on the cable keyboard 2026-11-23 with tools/verify_effects.py)
     'Static', 'SingleOn', 'SingleOff', 'Glittering', 'Fluttering', 'Colourful', 'Breath',
@@ -95,7 +97,7 @@ def find_path(iface=IFACE, pid=None):
             if setupapi.SetupDiGetDeviceInterfaceDetailW(ctypes.c_void_p(info), ctypes.byref(d), buf, need, None, None):
                 path = ctypes.wstring_at(ctypes.addressof(buf) + 4)
                 p = path.lower()
-                if 'vid_%04x&pid_%04x' % (VID, pid or PID) in p and iface in p:
+                if any('vid_%04x&pid_%04x' % (VID, x) in p for x in ((pid,) if pid else WIRED_PIDS)) and iface in p:
                     found = path
                     break
     finally:
@@ -710,13 +712,275 @@ class DongleKeyboard:
     upload_screen = realtime_frame = _unsupported
 
 
+class KeyboardV2:
+    """The keyboard on USB with the 'LED v2 Firmware 769' (USB ID 0C45:8039). Protocol read from AJAZZ's own web driver (ajazz.driveall.cn) and the
+    firmware, verified by reading the tables back from the hardware (see research/fw/NOTES_769.md):
+    * 64-byte output reports on the vendor interface MI_02 (usage page FF68), 64-byte input reports for the answers.
+    * Frame: `AA <cmd> <len> <addrLo> <addrHi> 00 <last-packet flag> 00 <data at offset 8...>` (56 data bytes per frame); the answer starts with 55.
+    * Tables: key data = 128 entries of 4 bytes (`type b1 b2 b3`, the same entry types as before), read with cmd 0x12 / Fn layer 0x16, written with
+      0x22 / 0x26 (512 bytes); lighting effect = 16 bytes, read 0x13 / write 0x23. Entry index = the key position of AJAZZ's key list (web_keylist.json).
+    Only a short whitelist of commands can be sent (reads, key tables, lighting effect): anything else, in particular the factory reset
+    (0x0F) and flash writes elsewhere, is refused. Macros, per-key colours, system settings and the screen are not implemented on this firmware yet."""
+    wireless = False
+    v2 = True
+    MAX_FRAMES = 140
+    READ_CMDS = range(0x10, 0x20)
+    WRITE_CMDS = (0x22, 0x23, 0x24, 0x25, 0x26, 0x34)
+    CHUNK = 56                                      # data bytes per 64-byte frame
+
+    def __init__(self):
+        self.path = find_path('mi_02', NEW_FIRMWARE_PID)
+        if not self.path:
+            raise OSError('AK980 (firmware 769) not found (plug it in by USB cable)')
+        self.lock = threading.RLock()
+        self._acks = queue.Queue()
+        self._hw = self._open(0x40000000)
+        hr = self._open(0x80000000)
+        threading.Thread(target=self._read_loop, args=(hr,), daemon=True).start()
+
+    def _open(self, access):
+        h = k32.CreateFileW(self.path, access, 3, None, 3, 0, None)
+        if h in (None, w.HANDLE(-1).value):
+            raise OSError('cannot open device (error %d)' % ctypes.get_last_error())
+        return h
+
+    def _read_loop(self, h):
+        while True:
+            buf = ctypes.create_string_buffer(65)
+            got = w.DWORD()
+            if not k32.ReadFile(h, buf, 65, ctypes.byref(got), None):
+                break
+            self._acks.put(bytes(buf.raw[1:got.value]))
+
+    def _frame(self, cmd, length, addr, data=b'', last=False):
+        if cmd not in self.READ_CMDS and cmd not in self.WRITE_CMDS:
+            raise ValueError('command 0x%02x is not allowed on this firmware' % cmd)
+        f = bytearray(64)
+        f[0], f[1], f[2], f[3], f[4] = 0xAA, cmd, length & 255, addr & 255, (addr >> 8) & 255
+        f[6] = 1 if last else 0
+        f[8:8 + len(data)] = data
+        return bytes(f)
+
+    def _exchange(self, cmd, content_size, data=None, timeout=0.5, retries=3, addr_start=0, last_flag=True):
+        """The same send loop as the web driver: content_size bytes in frames of 56 data bytes, each answered by a frame with the same command."""
+        out = []
+        chunks = -(-content_size // self.CHUNK)
+        with self.lock:
+            for i in range(chunks):
+                off = i * self.CHUNK
+                length = min(self.CHUNK, content_size - off)
+                part = bytes(data[off:off + length]) if data is not None else b''
+                frame = self._frame(cmd, length, addr_start + off, part, last=last_flag and i == chunks - 1)
+                got = None
+                for attempt in range(retries + 1):
+                    while not self._acks.empty():
+                        self._acks.get_nowait()
+                    n = w.DWORD()
+                    if not k32.WriteFile(self._hw, bytes([0]) + frame, 65, ctypes.byref(n), None) or n.value != 65:
+                        raise OSError('write failed (error %d)' % ctypes.get_last_error())
+                    end = time.time() + timeout
+                    while time.time() < end and got is None:
+                        try:
+                            r = self._acks.get(timeout=0.05)
+                        except queue.Empty:
+                            continue
+                        if r[:2] == bytes([0x55, cmd]):
+                            got = r
+                    if got is not None:
+                        break
+                if got is None:
+                    raise OSError('The keyboard did not answer (command 0x%02x). Unplug and replug it, or press a key to wake it.' % cmd)
+                out.append(got[8:8 + length])
+        return b''.join(out)[:content_size]
+
+    # --- key tables ------------------------------------------------------------------------------
+    @staticmethod
+    def _position_of_usage():
+        import json
+        import os
+        import keys as _keys
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web_keylist.json')
+        pos = {k[2]: k[0] for k in json.load(open(p, encoding='utf-8'))}          # HID usage -> table entry index
+        return {k[0]: pos[k[2]] for k in _keys.KEYS if k[2] in pos}             # this program's key index -> entry index
+
+    def read_keymap(self, layer='top'):
+        return self._exchange({'top': 0x12, 'fn': 0x16}[layer], 512)
+
+    def default_keymap(self, layer='top'):
+        return self._exchange({'top': 0x1F, 'fn': 0x1C}[layer], 512)
+
+    def set_keymap(self, entries, layer='top'):
+        """entries: {key_index: (type, b1, b2[, b3])}; every key not listed returns to its default function. Top layer: the table is the one read
+        from the keyboard with each known key position reset to its plain key (`02 00 <usage> 00`; the knob and other entries are kept), then the
+        entries are applied. Fn layer: the keyboard's own default Fn matrix (command 0x1C) is the base."""
+        where = self._position_of_usage()
+        if layer == 'fn':
+            table = bytearray(self.default_keymap('fn'))
+        else:
+            import json
+            import os
+            table = bytearray(self.read_keymap('top'))
+            p = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web_keylist.json')
+            for pos, _name, usage, _key in json.load(open(p, encoding='utf-8')):
+                table[pos * 4:pos * 4 + 4] = bytes([0x02, 0x00, usage, 0x00])
+        for idx, e in entries.items():
+            if idx not in where:
+                continue
+            o = where[idx] * 4
+            table[o:o + 4] = (bytes(e) + bytes(4))[:4]
+        self._exchange({'top': 0x22, 'fn': 0x26}[layer], 512, bytes(table), timeout=1.0)
+
+    # --- lighting ----------------------------------------------------------------------------------
+    def set_lighting(self, effect, rgb=(255, 0, 0), colorful=False, brightness=3, speed=3, direction=0):
+        eid = EFFECT_ID[effect] if isinstance(effect, str) else int(effect)
+        r, g, b = calibrate(rgb)
+        body = bytes([eid, r, g, b, 255, 0, 0, 0, 1 if colorful else 0, max(0, min(5, brightness)), max(0, min(5, speed)), direction & 1, 0, 0, 0xAA, 0x55])
+        self._exchange(0x23, 16, body)
+
+    def read_lighting(self):
+        return self._exchange(0x13, 16)
+
+    @staticmethod
+    def _led_position():
+        """This program's light index -> LED id of the new firmware (the same position numbers as the key table)."""
+        import json
+        import os
+        import keys as _keys
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web_keylist.json')
+        pos = {k[2]: k[0] for k in json.load(open(p, encoding='utf-8'))}
+        return {k[3]: pos[k[2]] for k in _keys.KEYS if k[2] in pos}
+
+    def set_user_lighting(self, colors, brightness=5, default=(0, 0, 0)):
+        """Per-key colours {light_index: (r, g, b)}: the colour table (cmd 0x24, 128 entries `led r g b`), then the custom lighting mode 0x80."""
+        where = self._led_position()
+        table = bytearray(512)
+        for i in range(128):
+            table[i * 4] = i
+        for li, pos in where.items():
+            r, g, b = calibrate(colors.get(li, default))
+            table[pos * 4:pos * 4 + 4] = bytes([pos, r, g, b])
+        self._exchange(0x24, 512, bytes(table), timeout=2.0)
+        self._exchange(0x23, 16, bytes([0x80, 0, 0, 0, 255, 0, 0, 0, 0, max(1, min(5, brightness)), 3, 0, 0, 0, 0xAA, 0x55]))
+
+    def set_time(self, when=None):
+        """Sets the clock of the TFT screen (cmd 0x34, `5A 01 5A yy mm dd hh mm ss weekday`, weekday 0 = Sunday)."""
+        import datetime
+        t = when or datetime.datetime.now()
+        body = bytes([90, 1, 90, t.year % 100, t.month, t.day, t.hour, t.minute, t.second, (t.weekday() + 1) % 7])
+        self._exchange(0x34, 24, body)
+
+    def wait_ready(self, timeout=10.0):
+        time.sleep(0.05)
+        return True
+
+    def _unsupported(self, *a, **k):
+        raise OSError('This is not available yet on keyboard firmware 769 over the cable. Bluetooth and the 2.4G dongle are not affected.')
+
+    # --- macros ----------------------------------------------------------------------------------
+    @staticmethod
+    def macro_blocks(macros):
+        """(index table of 400 bytes, macro data): macros = list of macros, macro = list of (hid_usage, is_down, delay_ms[, is_mouse]).
+        Index entry n = little-endian offset of the macro (data starts at 400); macro = `2*events lo hi 0 0` then 4 bytes per event
+        `delay lo, delay hi, usage, flag` (flag 0xB0 key down / 0x30 key up, 0x90 / 0x10 mouse button), as written by AJAZZ's web driver."""
+        index = bytearray(400)
+        data = bytearray()
+        for n, ev in enumerate(macros[:100]):
+            if not ev:
+                continue
+            off = 400 + len(data)
+            index[4 * n:4 * n + 4] = bytes([off & 255, (off >> 8) & 255, (off >> 16) & 255, 0])
+            data += bytes([(2 * len(ev)) & 255, (2 * len(ev)) >> 8, 0, 0])
+            for e in ev:
+                usage, down, delay = e[:3]
+                mouse = len(e) > 3 and e[3]
+                d = max(10, min(65535, int(delay)))
+                flag = (0x90 if down else 0x10) if mouse else (0xB0 if down else 0x30)
+                data += bytes([d & 255, d >> 8, usage & 255, flag])
+        return bytes(index), bytes(data)
+
+    def set_macros(self, macros):
+        index, data = self.macro_blocks(macros)
+        self._exchange(0x25, 400, index, timeout=1.0, last_flag=False)
+        if data:
+            self._exchange(0x25, len(data), data, timeout=1.0, addr_start=400)
+
+    # --- TFT screen --------------------------------------------------------------------------------
+    @staticmethod
+    def screen_payload(frames, delay_ms=50):
+        """Animation payload as AJAZZ's web driver builds it: a 256-byte header (byte 0 = frame count, then one byte per frame = delay in
+        units of 2 ms (max 255), the last frame's byte 0) followed by the RGB565 frames (240x135, little endian)."""
+        n = len(frames)
+        if not 1 <= n <= KeyboardV2.MAX_FRAMES:
+            raise ValueError('1-%d frames' % KeyboardV2.MAX_FRAMES)
+        delays = list(delay_ms) if isinstance(delay_ms, (list, tuple)) else [delay_ms] * n
+        head = bytearray(b'\xFF' * 256)
+        head[0] = n
+        for i in range(n - 1):
+            head[1 + i] = max(1, min(255, int(delays[i]) // 2))
+        head[n] = 0
+        return bytes(head) + b''.join(Keyboard.rgb565(f) for f in frames)
+
+    def upload_screen(self, frames, delay_ms=50, progress=None):
+        """Sends a picture or animation to the screen: 4104-byte reports on MI_03 (usage page FF67), `AA 50 seq(2) total(2) 50 06` + 4096 data
+        bytes, each answered by a `55 41 ...` input report (the web driver's SET_TFT_USER_ANIMATION). This erases and rewrites flash."""
+        data = self.screen_payload(frames, delay_ms)
+        total = -(-len(data) // 4096)
+        path3 = find_path('mi_03', NEW_FIRMWARE_PID)
+        if not path3:
+            raise OSError('screen interface (MI_03) not found')
+        hw = k32.CreateFileW(path3, 0x40000000, 3, None, 3, 0, None)
+        hr = k32.CreateFileW(path3, 0x80000000, 3, None, 3, 0, None)
+        if hw in (None, w.HANDLE(-1).value) or hr in (None, w.HANDLE(-1).value):
+            raise OSError('cannot open screen interface (error %d)' % ctypes.get_last_error())
+        acks = queue.Queue()
+
+        def reader():
+            while True:
+                buf = ctypes.create_string_buffer(65)
+                got = w.DWORD()
+                if not k32.ReadFile(hr, buf, 65, ctypes.byref(got), None):
+                    break
+                acks.put(bytes(buf.raw[1:got.value]))
+        threading.Thread(target=reader, daemon=True).start()
+        with self.lock:
+            for seq in range(total):
+                chunk = data[seq * 4096:(seq + 1) * 4096].ljust(4096, b'\0')
+                report = bytes([0, 0xAA, 0x50, seq & 255, seq >> 8, total & 255, total >> 8, 0x50, 0x06]) + chunk
+                for attempt in range(4):
+                    while not acks.empty():
+                        acks.get_nowait()
+                    n = w.DWORD()
+                    if not k32.WriteFile(hw, report, len(report), ctypes.byref(n), None) or n.value != len(report):
+                        raise OSError('screen write failed at chunk %d (error %d)' % (seq, ctypes.get_last_error()))
+                    ok = False
+                    end = time.time() + 2.0
+                    while time.time() < end and not ok:
+                        try:
+                            ok = acks.get(timeout=0.05)[:2] == bytes([0x55, 0x41])
+                        except queue.Empty:
+                            pass
+                    if ok:
+                        break
+                else:
+                    raise OSError('The keyboard did not answer while the screen picture was sent (chunk %d of %d).' % (seq + 1, total))
+                if progress:
+                    progress(seq + 1, total)
+
+    def read_macro_index(self):
+        return self._exchange(0x15, 400)
+
+    set_system = realtime_frame = stream_realtime = _unsupported
+
+
 def connect():
     """The wired keyboard if it is plugged in, else the 2.4G dongle. Raises OSError if neither is found."""
     try:
         return Keyboard()
     except OSError:
-        return DongleKeyboard()
-
+        try:
+            return KeyboardV2()
+        except OSError:
+            return DongleKeyboard()
 
 if __name__ == '__main__':
     import sys

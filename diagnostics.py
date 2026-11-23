@@ -17,7 +17,7 @@ def report(connection='unknown', extra=None):
              'Connection: %s' % connection]
     try:
         import ak980
-        lines += ['USB cable detected: %s' % bool(ak980.find_path()), '2.4G dongle detected: %s' % bool(ak980.find_path(pid=ak980.DONGLE_PID))]
+        lines += ['USB cable detected: %s' % bool(ak980.find_path() or ak980.find_path('mi_02', ak980.NEW_FIRMWARE_PID)), '2.4G dongle detected: %s' % bool(ak980.find_path(pid=ak980.DONGLE_PID))]
     except Exception as e:
         lines.append('device check failed: %s' % e)
     try:

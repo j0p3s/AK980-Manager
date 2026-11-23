@@ -130,7 +130,7 @@ class ConnectionPage(Page):
             self.rows[k].configure(text='checking...', fg=C['muted'])
 
         def work():
-            wired = bool(ak980.find_path())
+            wired = bool(ak980.find_path() or ak980.find_path('mi_02', ak980.NEW_FIRMWARE_PID))
             dongle = bool(ak980.find_path(pid=ak980.DONGLE_PID))
             try:
                 import battery

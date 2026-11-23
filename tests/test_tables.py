@@ -284,3 +284,111 @@ class TestI18n(unittest.TestCase):
             for src in ('Once', 'Every day', 'Rainbow', 'Hide to the tray', 'Update automatically', 'Play once'):
                 self.assertEqual(i18n.untr(i18n.tr(src)), src, (lang, src))
 
+
+
+class TestKeyboardV2(unittest.TestCase):
+    """The firmware-769 cable protocol, with the transport replaced by a fake keyboard."""
+
+    def fake(self):
+        kb = ak980.KeyboardV2.__new__(ak980.KeyboardV2)
+        kb.sent = []
+        import json
+        import os
+        keylist = json.load(open(os.path.join(os.path.dirname(ak980.__file__), 'web_keylist.json'), encoding='utf-8'))
+        top = bytearray(512)
+        for pos, _n, usage, _k in keylist:
+            top[pos * 4:pos * 4 + 4] = bytes([2, 0, usage, 0])
+        top[96 * 4:96 * 4 + 4] = bytes([3, 0x92, 1, 0])                 # an entry outside the key list must be kept
+        kb.top = top
+
+        def ex(cmd, size, data=None, timeout=0.5, retries=3):
+            if data is not None:
+                kb.sent.append((cmd, bytes(data)))
+                return b''
+            return bytes(kb.top) if cmd == 0x12 else bytes(512)
+        kb._exchange = ex
+        return kb
+
+    def test_frame_layout_and_whitelist(self):
+        kb = ak980.KeyboardV2.__new__(ak980.KeyboardV2)
+        f = kb._frame(0x22, 56, 112, bytes(range(56)), last=False)
+        self.assertEqual(len(f), 64)
+        self.assertEqual(f[:7], bytes([0xAA, 0x22, 56, 112, 0, 0, 0]))
+        self.assertEqual(f[8:64], bytes(range(56)))
+        self.assertEqual(kb._frame(0x22, 8, 504, bytes(8), last=True)[6], 1)
+        for bad in (0x0F, 0x21, 0x27, 0x01, 0x02, 0x33, 0x35, 0x36):
+            with self.assertRaises(ValueError):
+                kb._frame(bad, 1, 0)
+
+    def test_set_keymap_changes_only_listed_keys(self):
+        import keys
+        kb = self.fake()
+        f12 = next(k[0] for k in keys.KEYS if k[1] == 'F12')
+        kb.set_keymap({f12: (3, 0x92, 1)}, 'top')
+        cmd, data = kb.sent[0]
+        self.assertEqual(cmd, 0x22)
+        self.assertEqual(len(data), 512)
+        diff = [i for i in range(128) if data[i * 4:i * 4 + 4] != bytes(kb.top[i * 4:i * 4 + 4])]
+        self.assertEqual(diff, [12])
+        self.assertEqual(data[48:52], bytes([3, 0x92, 1, 0]))
+        self.assertEqual(data[96 * 4:96 * 4 + 4], bytes([3, 0x92, 1, 0]))
+
+    def test_unlisted_keys_return_to_default(self):
+        kb = self.fake()
+        kb.top[12 * 4:12 * 4 + 4] = bytes([3, 0x92, 1, 0])               # F12 was remapped earlier
+        kb.set_keymap({}, 'top')
+        self.assertEqual(kb.sent[0][1][48:52], bytes([2, 0, 0x45, 0]))
+
+    def test_fn_layer_uses_fn_command(self):
+        kb = self.fake()
+        kb.set_keymap({}, 'fn')
+        self.assertEqual(kb.sent[0][0], 0x26)
+
+    def test_lighting_body(self):
+        kb = self.fake()
+        kb.set_lighting('Static', (10, 20, 30), True, 4, 2, 1)
+        cmd, data = kb.sent[0]
+        self.assertEqual((cmd, len(data)), (0x23, 16))
+        self.assertEqual(data[:5], bytes([1, 10, 20, 30, 255]))
+        self.assertEqual(data[8:12], bytes([1, 4, 2, 1]))
+        self.assertEqual(data[14:], bytes([0xAA, 0x55]))
+
+    def test_per_key_colours_and_time(self):
+        import datetime
+        import keys
+        kb = self.fake()
+        esc = next(k for k in keys.KEYS if k[1] == 'Esc')
+        kb.set_user_lighting({esc[3]: (1, 2, 3)}, brightness=9)
+        (c1, tab), (c2, eff) = kb.sent[0], kb.sent[1]
+        self.assertEqual((c1, len(tab), c2), (0x24, 512, 0x23))
+        self.assertEqual(tab[0:4], bytes([0, 1, 2, 3]))                       # Esc is position 0
+        self.assertEqual(tab[4 * 5:4 * 5 + 4], bytes([5, 0, 0, 0]))           # every other led is off and keeps its own id
+        self.assertEqual((eff[0], eff[9]), (0x80, 5))
+        kb.sent.clear()
+        kb.set_time(datetime.datetime(2026, 11, 22, 13, 45, 7))               # a Sunday
+        c, body = kb.sent[0]
+        self.assertEqual((c, body[:10]), (0x34, bytes([90, 1, 90, 26, 11, 22, 13, 45, 7, 0])))
+
+    def test_macro_blocks(self):
+        index, data = ak980.KeyboardV2.macro_blocks([[(4, True, 20), (4, False, 20)], [], [(1, True, 5, True), (1, False, 70000, True)]])
+        self.assertEqual(len(index), 400)
+        self.assertEqual(index[0:4], bytes([144, 1, 0, 0]))                  # first macro at 400
+        self.assertEqual(index[4:8], bytes(4))                               # the empty one has no entry
+        self.assertEqual(index[8:12], bytes([144 + 12, 1, 0, 0]))            # 4 header + 2 events * 4
+        self.assertEqual(data[:12], bytes([4, 0, 0, 0, 20, 0, 4, 0xB0, 20, 0, 4, 0x30]))
+        self.assertEqual(data[12:16], bytes([4, 0, 0, 0]))
+        self.assertEqual(data[16:20], bytes([10, 0, 1, 0x90]))               # delay raised to the 10 ms minimum, mouse button down
+        self.assertEqual(data[20:24], bytes([255, 255, 1, 0x10]))            # delay capped at 65535
+
+    def test_frames_use_the_start_address(self):
+        kb = ak980.KeyboardV2.__new__(ak980.KeyboardV2)
+        f = kb._frame(0x25, 56, 400 + 56, bytes(56), last=True)
+        self.assertEqual((f[3], f[4], f[6]), ((456) & 255, 456 >> 8, 1))
+
+    def test_screen_payload(self):
+        from PIL import Image
+        imgs = [Image.new('RGB', (240, 135), c) for c in ((255, 0, 0), (0, 255, 0), (0, 0, 255))]
+        p = ak980.KeyboardV2.screen_payload(imgs, [100, 200, 300])
+        self.assertEqual(len(p), 256 + 3 * 240 * 135 * 2)
+        self.assertEqual(list(p[:5]), [3, 50, 100, 0, 255])                # count, 100/2, 200/2, last = 0, rest 0xFF
+        self.assertEqual(p[256:258], (0xF800).to_bytes(2, 'little'))      # pure red in RGB565

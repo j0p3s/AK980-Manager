@@ -365,10 +365,13 @@ class App(tk.Tk):
             try:
                 self.kb = ak980.connect()
                 self._draw_pill(True)
-                self.status_msg('Keyboard connected' + (' over 2.4G (the screen, Key glow and Bass pulse need the USB cable)' if getattr(self.kb, 'wireless', False) else ''), 'ok')
-            except OSError:
+                self.status_msg('Keyboard connected' + (' over 2.4G (the screen, Key glow and Bass pulse need the USB cable)' if getattr(self.kb, 'wireless', False) else
+                                                        (' (firmware 769: keys and lighting work; macros, per-key colours and the screen are not supported yet)' if getattr(self.kb, 'v2', False) else '')), 'ok')
+            except OSError as e:
                 self._draw_pill(False)
-                if getattr(self, '_bt_seen', None):
+                if 'new USB ID' in str(e):
+                    self.status_msg(str(e), 'err')
+                elif getattr(self, '_bt_seen', None):
                     self.status_msg('The keyboard is connected over Bluetooth (%s). This program cannot change settings over Bluetooth: '
                                     'plug in the USB cable or use the 2.4G dongle.' % self._bt_seen, 'err')
                 else:
