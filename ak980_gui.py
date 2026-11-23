@@ -366,7 +366,7 @@ class App(tk.Tk):
                 self.kb = ak980.connect()
                 self._draw_pill(True)
                 self.status_msg('Keyboard connected' + (' over 2.4G (the screen, Key glow and Bass pulse need the USB cable)' if getattr(self.kb, 'wireless', False) else
-                                                        (' (firmware 769: keys and lighting work; macros, per-key colours and the screen are not supported yet)' if getattr(self.kb, 'v2', False) else '')), 'ok')
+                                                        ''), 'ok')
             except OSError as e:
                 self._draw_pill(False)
                 if 'new USB ID' in str(e):

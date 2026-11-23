@@ -316,7 +316,7 @@ class TestKeyboardV2(unittest.TestCase):
         self.assertEqual(f[:7], bytes([0xAA, 0x22, 56, 112, 0, 0, 0]))
         self.assertEqual(f[8:64], bytes(range(56)))
         self.assertEqual(kb._frame(0x22, 8, 504, bytes(8), last=True)[6], 1)
-        for bad in (0x0F, 0x21, 0x27, 0x01, 0x02, 0x33, 0x35, 0x36):
+        for bad in (0x0F, 0x27, 0x01, 0x02, 0x33, 0x35, 0x36):
             with self.assertRaises(ValueError):
                 kb._frame(bad, 1, 0)
 

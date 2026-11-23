@@ -725,7 +725,7 @@ class KeyboardV2:
     v2 = True
     MAX_FRAMES = 140
     READ_CMDS = range(0x10, 0x20)
-    WRITE_CMDS = (0x22, 0x23, 0x24, 0x25, 0x26, 0x34)
+    WRITE_CMDS = (0x21, 0x22, 0x32, 0x23, 0x24, 0x25, 0x26, 0x34)
     CHUNK = 56                                      # data bytes per 64-byte frame
 
     def __init__(self):
@@ -752,11 +752,12 @@ class KeyboardV2:
                 break
             self._acks.put(bytes(buf.raw[1:got.value]))
 
-    def _frame(self, cmd, length, addr, data=b'', last=False):
+    def _frame(self, cmd, length, addr, data=b'', last=False, param=0):
         if cmd not in self.READ_CMDS and cmd not in self.WRITE_CMDS:
             raise ValueError('command 0x%02x is not allowed on this firmware' % cmd)
         f = bytearray(64)
         f[0], f[1], f[2], f[3], f[4] = 0xAA, cmd, length & 255, addr & 255, (addr >> 8) & 255
+        f[5] = param & 255
         f[6] = 1 if last else 0
         f[8:8 + len(data)] = data
         return bytes(f)
@@ -969,7 +970,52 @@ class KeyboardV2:
     def read_macro_index(self):
         return self._exchange(0x15, 400)
 
-    set_system = realtime_frame = stream_realtime = _unsupported
+    # --- system settings (cmd 0x11 read / 0x21 write, 56 data bytes; layout from the web driver's getGameMode/setGameMode) ---------------
+    # [2] Fn switch (0 momentary, 1 toggle), [3] sleep time in minutes (0 = never), [4] key response level, [6] system mode, [7] TFT display time.
+    def read_system(self):
+        return bytes(self._exchange(0x11, 56))
+
+    SLEEP_MINUTES = {0: 0, 1: 1, 2: 5, 3: 30}
+
+    def set_system(self, sleep=2, level=2, fn_toggle=False):
+        """sleep is the same 0-3 choice as the other keyboards (No Sleep, 1, 5, 30 min). Only the three known fields change; every other byte of the settings block is kept as the keyboard reports it."""
+        body = bytearray(self.read_system())
+        body[2] = 1 if fn_toggle else 0
+        body[3] = self.SLEEP_MINUTES.get(sleep, 5)
+        body[4] = level
+        self._exchange(0x21, 56, bytes(body), timeout=1.0)
+
+    # --- real-time lighting (cmd 0x32 as the web driver's setMusicData: 4-byte entries `led r g b`, 56 data bytes per frame) -----------
+    def realtime_frame(self, colors, default=(0, 0, 0), param=0, timeout=0.05):
+        where = self._led_position()
+        data = bytearray()
+        for li, pos in where.items():
+            r, g, b = calibrate(colors.get(li, default))
+            data += bytes([pos, r, g, b])
+        chunks = -(-len(data) // self.CHUNK)
+        with self.lock:
+            for i in range(chunks):
+                part = bytes(data[i * self.CHUNK:(i + 1) * self.CHUNK])
+                while not self._acks.empty():
+                    self._acks.get_nowait()
+                f = self._frame(0x32, len(part), i * self.CHUNK, part, last=i == chunks - 1, param=param)
+                n = w.DWORD()
+                if not k32.WriteFile(self._hw, bytes([0]) + f, 65, ctypes.byref(n), None) or n.value != 65:
+                    raise OSError('write failed (error %d)' % ctypes.get_last_error())
+                end = time.time() + timeout
+                while time.time() < end:
+                    try:
+                        if self._acks.get(timeout=0.01)[:2] == bytes([0x55, 0x32]):
+                            break
+                    except queue.Empty:
+                        pass
+
+    def stream_realtime(self, frame_fn, seconds, fps=20, stop=None):
+        t0 = time.time()
+        while time.time() - t0 < seconds and not (stop and stop.is_set()):
+            t = time.time() - t0
+            self.realtime_frame(frame_fn(t))
+            time.sleep(max(0.0, 1.0 / fps - (time.time() - t0 - t)))
 
 
 def connect():

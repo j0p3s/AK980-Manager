@@ -306,7 +306,8 @@ class LightingPage(Page):
             kb = self.app.kb
             if kb is None or not hasattr(kb, 'read_colors'):
                 self.mirror.set(False)
-                self.mirror_msg.configure(text='Needs the USB cable (the 2.4G dongle cannot read the colours back).', fg=C['warn'])
+                self.mirror_msg.configure(text=('The keyboard firmware 769 cannot report its colours back.' if getattr(kb, 'v2', False) else
+                                                'Needs the USB cable (the 2.4G dongle cannot read the colours back).'), fg=C['warn'])
                 return
             self.mirror_msg.configure(text='Reading the colours the keys show (about once a second). Rainbow and similar effects are approximate.', fg=C['muted'])
             if not self._mirror_on:
