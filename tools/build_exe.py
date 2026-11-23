@@ -36,7 +36,7 @@ def main():
         '--exclude-module', 'frida', '--exclude-module', 'matplotlib', '--exclude-module', 'scipy',
         '--specpath', os.path.join(ROOT, 'build'), os.path.join(ROOT, 'ak980_gui.py')])
     folder = os.path.join('dist', NAME)
-    for f in ('LICENSE', 'README.md'):
+    for f in ('LICENSE', 'NOTICE', 'README.md'):
         shutil.copy(f, folder)
     z = os.path.join('dist', 'AK980-Manager-windows.zip')
     with zipfile.ZipFile(z, 'w', zipfile.ZIP_DEFLATED) as zf:

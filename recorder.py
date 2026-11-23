@@ -7,7 +7,7 @@ import ctypes.wintypes as wt
 import threading
 import time
 
-MAX_EVENTS = 250          # safety cap per recording (the keyboard's macro memory limit has not been measured)
+MAX_EVENTS = 250          # default cap per recording; the Macros page passes what is left of the keyboard's macro memory
 
 # Windows scan code -> HID usage, set 1 (plain keys) and the E0-prefixed ones.
 _PLAIN = {0x01: 41, 0x0C: 45, 0x0D: 46, 0x0E: 42, 0x0F: 43, 0x1A: 47, 0x1B: 48, 0x1C: 40, 0x1D: 224, 0x27: 51, 0x28: 52, 0x29: 53,
@@ -37,14 +37,15 @@ def scan_to_usage(scan, extended):
 class Collector:
     """Turns raw key / mouse notifications into macro events (no Windows calls, so it can be tested)."""
 
-    def __init__(self):
+    def __init__(self, max_events=MAX_EVENTS):
         self.events, self.down, self.last = [], set(), None
         self.full = False
+        self.max_events = max_events
 
     def _add(self, usage, down, mouse, now):
         """The keyboard applies an event's delay AFTER the event (verified: a press recorded with a long wait before it kept the
         key held and auto-repeated), so the gap to this event is stored on the PREVIOUS event."""
-        if len(self.events) >= MAX_EVENTS:
+        if len(self.events) >= self.max_events:
             self.full = True
             return
         if self.events and self.last is not None:
@@ -129,8 +130,8 @@ def _own_window_focused():
 class Recorder:
     """start() begins recording in a background thread, stop() returns the recorded events."""
 
-    def __init__(self):
-        self.col = Collector()
+    def __init__(self, max_events=MAX_EVENTS):
+        self.col = Collector(max_events)
         self.thread = None
         self.tid = None
         self.ready = threading.Event()

@@ -28,6 +28,20 @@ MUSIC_SCHEMES = {'Green/Yellow/Red': 1, 'Rainbow': 2, 'Reverse Rainbow': 3, 'Gra
                  'White': 6, 'Red': 7, 'Orange': 8, 'Yellow': 9, 'Green': 10, 'Blue': 11}
 MUSIC_BACKGROUNDS = {'Off': 0, 'White': 6, 'Red': 7, 'Orange': 8, 'Yellow': 9, 'Green': 10, 'Blue': 11}
 
+# Byte sequences that put the keyboard's chip into firmware-update (ISP / bootloader) mode. Nothing here ever sends them; this is the
+# last line of defence before bytes reach the device (sequences taken from Keymotion's protocol notes, Apache-2.0 / MIT).
+_BOOTLOADER = (bytes([0xAA, 0x42, 0x89, 0x5A, 0xFF, 0x71, 0x62, 0xCC]), bytes([0xAA, 0x55, 0xA5, 0x5A, 0xFF, 0x00, 0x33, 0xCC]))
+
+
+def guard(packet):
+    """Raise ValueError if packet looks like a firmware-update command; return it unchanged otherwise."""
+    p = bytes(packet)
+    for q in (p, p[1:]):                                   # with and without the HID report-id byte
+        if any(q.startswith(m) for m in _BOOTLOADER) or (len(q) >= 3 and q[0] in (0x01, 0x05, 0x07) and q[1] == 0xAA and q[2] == 0x55):
+            raise ValueError('refusing to send a firmware-update (bootloader) sequence')
+    return packet
+
+
 k32 = ctypes.WinDLL('kernel32', use_last_error=True)
 hid = ctypes.WinDLL('hid')
 setupapi = ctypes.WinDLL('setupapi', use_last_error=True)
@@ -92,6 +106,7 @@ class Keyboard:
 
     @staticmethod
     def _xfer(h, payload):
+        guard(payload)
         buf = bytes([0]) + payload.ljust(64, b'\0')[:64]
         if not hid.HidD_SetFeature(h, buf, 65):
             raise OSError('SetFeature failed (%d)' % ctypes.get_last_error())
@@ -155,6 +170,7 @@ class Keyboard:
         t = when or datetime.datetime.now()
         body = bytearray(64)
         body[0:9] = bytes([0x00, 0x01, 0x5A, t.year % 100, t.month, t.day, t.hour, t.minute, t.second])
+        body[10] = (t.weekday() + 1) % 7                    # day of week, 0 = Sunday (as the official driver sends it)
         body[62:64] = bytes([0xAA, 0x55])
         self.transaction(bytes([0x04, 0x18]), bytes([0x04, 0x28, 0, 0, 0, 0, 0, 0, 1]), bytes(body))
 
@@ -410,6 +426,7 @@ class DongleKeyboard:
             self._acks.put(buf.raw[1:got.value])
 
     def _send(self, body, retries=10):
+        guard(body)
         """Send one 32-byte command and wait for the dongle's answer. The wireless link sleeps when idle and the first packet after a
         pause can be lost, so an unanswered command is sent again (up to `retries` times)."""
         b = bytearray(32)
@@ -524,7 +541,7 @@ class DongleKeyboard:
         """Clock of the screen: `0c 10 00 00 01 5a yy mm dd hh mm ss ... aa 55` (captured)."""
         import datetime
         t = when or datetime.datetime.now()
-        body = bytes([0x00, 0x01, 0x5A, t.year % 100, t.month, t.day, t.hour, t.minute, t.second]) + bytes(5)
+        body = bytes([0x00, 0x01, 0x5A, t.year % 100, t.month, t.day, t.hour, t.minute, t.second, 0, (t.weekday() + 1) % 7]) + bytes(3)
         self._send_body(0x0C, body)
 
     def set_user_lighting(self, colors, brightness=5, default=(0, 0, 0)):

@@ -1,0 +1,11 @@
+Ajazz AK980 V2 Manager - third-party notices
+
+This program is GPL-3.0-or-later (see LICENSE). It was written by reverse engineering the official app's USB/HID traffic.
+
+Keymotion (https://github.com/cebersaban44-rgb/keymotion), Apache-2.0 OR MIT:
+only protocol facts were taken from its documentation and source comments, no code was copied:
+  * the keyboard's macro memory limit, (steps + macros) * 8 <= 0xA8C bytes
+  * the rule that the Fn key must never be remapped
+  * the weekday byte (offset 10, 0 = Sunday) of the clock packet
+  * the byte sequences that start a firmware update (the packet guard refuses to send them)
+Thank you to its author.

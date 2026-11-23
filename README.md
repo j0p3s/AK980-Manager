@@ -13,12 +13,12 @@ Windows, Python 3.10+ (Tkinter), Pillow. Licensed under the **GNU GPL v3 or late
 |---|---|
 | **Lighting** | built-in effects (all 19 verified), colour, "colorful" rainbow, brightness (0 = LEDs off), speed, direction |
 | **Per-key** | paint every key with its own colour; import / export the official app's lighting scheme files |
-| **Reactive** | keys that glow when pressed; Music Rhythm equalizer (bar colours, background, amplitude over 2.4G) and bass pulse |
+| **Reactive** | keys that glow when pressed; Music Rhythm equalizer (bar colours, background, amplitude over 2.4G), bass pulse, and system gauges (CPU on the top row, memory on the number row, cable only) |
 | **Keys** | remap keys on the **Top** and **Fn** layer to a key, characters of your Windows layout, media, mouse, macro, special function (Show Desktop, Copy, Paste...), PC action (open program / website / file, send text) or key sequence |
 | **Macros** | record keys and mouse clicks, type text, edit the steps (waits, speed), duplicate, import / export; assign on the Keys page |
 | **Screen** | frame editor and GIF import / export for the TFT screen (240x135, up to 140 frames); sync the clock |
 | **Profiles** | save keymap, macros and lighting under a name and switch with one click |
-| **System** | sleep time, key response level, Fn key Momentary / Toggle, start with Windows, tray, updates |
+| **System** | sleep time, key response level, Fn key Momentary / Toggle, sync the keyboard clock, Bluetooth battery level (read-only), start with Windows, tray, updates |
 
 ## Install and run
 
@@ -49,12 +49,17 @@ Use as a library: `import ak980; kb = ak980.Keyboard(); kb.set_lighting('Spectru
 ## Limitations
 
 * Over the 2.4G dongle the screen editor, key glow and Bass pulse are not available (the official app does not offer them there either); Bluetooth is not supported.
-* Macros: text is typed the way your Windows layout types it; recorded macros replay the exact keys and clicks (mouse movement is not recorded). The keyboard's macro memory limit is not known: if a long macro is cut off, shorten it. PC actions work while the manager is running.
+* Macros: text is typed the way your Windows layout types it; recorded macros replay the exact keys and clicks (mouse movement is not recorded). The keyboard holds about 2700 bytes of macros (8 bytes per step); the page shows how much is used. PC actions work while the manager is running.
 * Real-time lighting over the cable (key glow, bass pulse) is implemented from captures; Music Rhythm "Bars" over 2.4G uses the keyboard's own equaliser.
 * Key response level 1 and the keyboard clock's effect on the screen time were not checked by eye.
 * Profiles are stored on the PC (Profiles page), not in the keyboard.
 * Not implemented: firmware update, Reset / Factory Reset (deliberately).
 * Writes take time: a per-key / macro / keymap update needs a few seconds; a screen upload with many frames can take minutes.
+
+## Credits
+
+Protocol notes (macro memory size, the Fn-key rule, the clock weekday byte, the firmware-update guard) come from the open-source
+[Keymotion](https://github.com/cebersaban44-rgb/keymotion) project (Apache-2.0 / MIT); see `NOTICE`.
 
 ## Repository layout
 

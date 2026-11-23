@@ -414,7 +414,7 @@ class PerKeyPage(Page):
 # ------------------------------------------------------------------------------------------------ reactive
 class ReactivePage(Page):
     title, subtitle = 'Reactive', 'Effects driven by your PC: keys that glow when pressed, and music on the keyboard.'
-    MODES = ('Key glow', 'Equalizer', 'Bass pulse')
+    MODES = ('Key glow', 'Equalizer', 'Bass pulse', 'System gauges')
 
     def __init__(self, parent, app):
         super().__init__(parent, app)
@@ -453,7 +453,9 @@ class ReactivePage(Page):
             'Key glow': 'Every key you press lights up and fades out; the rest of the keyboard stays dark.',
             'Equalizer': 'Whatever your PC plays becomes a spectrum analyser: bass on the left, treble on the right, '
                          'bars growing up from the bottom row.',
-            'Bass pulse': 'The whole keyboard pulses with the bass of the music.'}[m])
+            'Bass pulse': 'The whole keyboard pulses with the bass of the music.',
+            'System gauges': 'CPU load on the function-key row and memory use on the number row, as bars of lit keys (green to red). '
+                             'Needs the USB cable.'}[m])
         for w in self.opts.body.winfo_children():
             w.destroy()
         b = self.opts.body
@@ -465,6 +467,8 @@ class ReactivePage(Page):
             Seg(col, effects_styles(), self.style, self._live).pack(anchor='w', pady=(6, 10))
             label(col, 'Single colour', 10, False, C['muted'], C['card']).pack(anchor='w')
             Palette(col, self._set_color).pack(anchor='w', pady=(6, 0))
+        elif m == 'System gauges':
+            label(b, 'Top row (Esc to Delete): CPU load.   Number row (` to Backspace): memory in use.', 10, False, C['muted'], C['card']).pack(anchor='w')
         else:
             Slider(b, 'Sensitivity', self.gain, 0.4, 4.0, 0.1, self._live, width=260, fmt='%.1f', unit='x').pack(side='left')
             col = tk.Frame(b, bg=C['card'])
@@ -514,6 +518,8 @@ class ReactivePage(Page):
         try:
             if self.mode.get() == 'Key glow':
                 eff = effects.KeyGlow(self.fade.get(), self.style.get(), self.color)
+            elif self.mode.get() == 'System gauges':
+                eff = effects.Gauges()
             else:
                 eff = effects.Equalizer('Bars' if self.mode.get() == 'Equalizer' else 'Bass pulse', self.pal.get(), self.gain.get(),
                                         self.scheme.get(), self.bgcol.get(), int(self.amp.get()))
@@ -528,7 +534,8 @@ class ReactivePage(Page):
         self.btn.kind = 'danger'
         self.btn._draw()
         dev = getattr(eff, 'device', None)
-        self.msg.configure(text='Running' + (' - listening to %s' % dev if dev else ' - press some keys'), fg=C['ok'])
+        hint = ' - CPU on the top row, memory on the number row' if isinstance(eff, effects.Gauges) else ' - press some keys'
+        self.msg.configure(text='Running' + (' - listening to %s' % dev if dev else hint), fg=C['ok'])
         self.app.status_msg('Reactive effect running', 'ok')
 
     def stop(self):
@@ -1003,6 +1010,10 @@ class KeysPage(Page):
         if self.sel is None:
             return
         idx, lab = self.by_li[self.sel]
+        if idx == FN_INDEX:
+            messagebox.showwarning('Fn key', 'The Fn key cannot be remapped: without it the Fn layer and the functions built into '
+                                   'the keyboard (lighting, media, connection) would be gone.')
+            return
         entry = self._entry()
         if entry is None:
             return
@@ -1074,7 +1085,14 @@ USAGE_NAMES.update({224: 'Ctrl', 225: 'Shift', 226: 'Alt', 227: 'Win', 228: 'Rig
                     101: 'Menu', 88: 'Keypad Enter', 53: '` ~', 100: 'ISO key'})
 SPECIAL_USAGES = {224, 225, 226, 227, 228, 229, 230, 231, 41, 42, 43, 40, 44, 57, 73, 77, 70, 101, 88}
 MOUSE_NAMES = {1: 'Left click', 2: 'Right click', 4: 'Middle click'}
+FN_INDEX = next(k[0] for k in keys.KEYS if k[1] == 'Fn')       # the Fn key is never remapped (Keymotion's notes: it would remove the Fn layer)
 MACRO_SLOTS = 100               # directory slots in the keyboard's macro table
+MACRO_BUDGET = 0xA8C            # bytes of macro data the stock driver allows: (events + macros) * 8 (found in Keymotion's protocol notes)
+
+
+def macro_bytes(macros):
+    """Bytes the given macros use against MACRO_BUDGET."""
+    return (sum(len(events_of(m)) for m in macros) + len(macros)) * 8
 
 
 def layout_key_names():
@@ -1262,7 +1280,9 @@ class MacrosPage(Page):
         import recorder
         if self.recorder is None:
             try:
-                self.recorder = recorder.Recorder()
+                others = [m for i, m in enumerate(self.app.macros) if i != self.cur]
+                room = (MACRO_BUDGET - macro_bytes(others) - 8) // 8 - len(self.events) - 1       # events still free, this macro's header counted
+                self.recorder = recorder.Recorder(max(0, min(recorder.MAX_EVENTS, room)))
                 self.recorder.start()
             except Exception as e:
                 self.recorder = None
@@ -1299,15 +1319,15 @@ class MacrosPage(Page):
     # ---- the list of macros
     def _refresh(self):
         self.lb.delete(0, 'end')
-        total = 0
         for i, m in enumerate(self.app.macros):
             ev = events_of(m)
-            total += len(ev)
             self.lb.insert('end', '  %d   %s   (%d events)' % (i, m['name'], len(ev)))
         if self.cur is not None and self.cur < len(self.app.macros):
             self.lb.selection_set(self.cur)
-        self.mem.configure(text='%d of %d macro slots used, %d events in total. The keyboard memory limit is not known: if a long '
-                           'macro is cut off, shorten it.' % (len(self.app.macros), MACRO_SLOTS, total), fg=C['muted'])
+        used = macro_bytes(self.app.macros)
+        self.mem.configure(text='Keyboard macro memory: %d of %d bytes used (%d%%), %d of %d macros.' % (
+            used, MACRO_BUDGET, 100 * used // MACRO_BUDGET, len(self.app.macros), MACRO_SLOTS),
+            fg=C['bad'] if used > MACRO_BUDGET else C['muted'])
 
     def new(self):
         self.cur, self.events = None, []
@@ -1334,6 +1354,11 @@ class MacrosPage(Page):
             return False
         m = {'name': n, 'delay': self._delay(), 'events': [list(e) for e in self.events]}
         m['text'] = 'Steps: ' + events_summary(self.events)
+        others = [x for i, x in enumerate(self.app.macros) if x['name'] != n and i != self.cur]
+        if macro_bytes(others + [m]) > MACRO_BUDGET:
+            messagebox.showerror('Macro', 'The keyboard has room for %d bytes of macros (8 per step and per macro) and this would need %d.\n\n'
+                                 'Shorten this macro or delete another one.' % (MACRO_BUDGET, macro_bytes(others + [m])))
+            return False
         same = [i for i, x in enumerate(self.app.macros) if x['name'] == n]
         if self.cur is not None and self.cur < len(self.app.macros) and (not same or self.cur in same):
             self.app.macros[self.cur] = m
@@ -1427,7 +1452,21 @@ class SystemPage(Page):
             w.grid(row=r, column=1, sticky='w')
         label(g, 'Higher response level = more delay (less key chatter). Level 2 is the keyboard default.', 9, False, C['muted'],
               C['card']).grid(row=3, column=0, columnspan=2, sticky='w', pady=(4, 10))
-        Btn(g, 'Apply to keyboard', self.apply, 'primary', height=36).grid(row=4, column=0, columnspan=2, sticky='w')
+        brow = tk.Frame(g, bg=C['card'])
+        brow.grid(row=4, column=0, columnspan=2, sticky='w')
+        Btn(brow, 'Apply to keyboard', self.apply, 'primary', height=36).pack(side='left')
+        Btn(brow, 'Sync clock now', self.sync_clock, 'ghost', height=36).pack(side='left', padx=10)
+        bt = Card(self, 'Bluetooth battery')
+        bt.pack(fill='x', pady=(14, 0))
+        label(bt.body, 'When the keyboard is paired over Bluetooth, Windows can tell its battery level (read-only; nothing is written '
+              'to the keyboard). Over the cable and the 2.4G dongle read the battery on its own screen.', 9, False, C['muted'], C['card'],
+              wraplength=720, justify='left').pack(anchor='w')
+        brow2 = tk.Frame(bt.body, bg=C['card'])
+        brow2.pack(fill='x', pady=(10, 0))
+        self.bat_btn = Btn(brow2, 'Read battery', self.read_battery, 'ghost', height=34)
+        self.bat_btn.pack(side='left')
+        self.bat_msg = label(brow2, '', 10, False, C['muted'], C['card'], justify='left')
+        self.bat_msg.pack(side='left', padx=14)
         st = Card(self, 'Startup')
         st.pack(fill='x', pady=(14, 0))
         label(st.body, 'Start with Windows, as administrator (Task Scheduler). Lets you turn off the official app\'s autostart: '
@@ -1452,6 +1491,8 @@ class SystemPage(Page):
         self.ver.pack(anchor='w')
         label(soft.body, 'The program keeps itself and its packages up to date automatically (checked on every start).', 9, False,
               C['muted'], C['card']).pack(anchor='w', pady=(2, 10))
+        label(soft.body, 'Thanks to the open-source Keymotion project (Apache-2.0 / MIT) for protocol notes: the macro memory size, '
+              'the Fn-key rule and the weekday byte of the clock.', 9, False, C['muted'], C['card'], wraplength=720, justify='left').pack(anchor='w', pady=(0, 10))
         self.upd_btn = Btn(soft.body, 'Check for updates now', self.check, height=34)
         self.upd_btn.pack(anchor='w')
         self.upd_msg = label(soft.body, '', 10, False, C['muted'], C['card'])
@@ -1491,6 +1532,24 @@ class SystemPage(Page):
             ok, text = autostart.enable() if turn_on else autostart.disable()
             self.app.post(lambda: (self._auto_refresh((text, C['ok'] if ok else C['warn'])), self.auto_btn.set_enabled(True)))
         threading.Thread(target=job, daemon=True).start()
+
+    def read_battery(self):
+        import threading
+        import battery
+        self.bat_btn.set_enabled(False)
+        self.bat_msg.configure(text='Reading...', fg=C['muted'])
+
+        def job():
+            try:
+                text, ok = battery.summary(battery.read()), True
+            except Exception as e:
+                text, ok = 'Could not read it: %s' % e, False
+            self.app.post(lambda: (self.bat_msg.configure(text=text, fg=C['ok'] if ok else C['warn']), self.bat_btn.set_enabled(True)))
+        threading.Thread(target=job, daemon=True).start()
+
+    def sync_clock(self):
+        if self.app.require_kb():
+            self.app.run(lambda kb: kb.set_time(), "Keyboard clock set to this PC's time")
 
     def apply(self):
         if not self.app.require_kb():

@@ -185,6 +185,64 @@ class Equalizer:
         self.audio.close()
 
 
+class _MemStatus(ctypes.Structure):
+    _fields_ = [('length', ctypes.c_ulong), ('load', ctypes.c_ulong), ('total_phys', ctypes.c_ulonglong), ('avail_phys', ctypes.c_ulonglong),
+                ('total_page', ctypes.c_ulonglong), ('avail_page', ctypes.c_ulonglong), ('total_virt', ctypes.c_ulonglong),
+                ('avail_virt', ctypes.c_ulonglong), ('avail_ext', ctypes.c_ulonglong)]
+
+
+def cpu_load_reader():
+    """Returns a function giving the CPU load (0-1) since its previous call (GetSystemTimes, no extra package)."""
+    k32 = ctypes.windll.kernel32
+    last = [None]
+
+    def read():
+        idle, kernel, user = ctypes.c_ulonglong(), ctypes.c_ulonglong(), ctypes.c_ulonglong()      # FILETIMEs, 100 ns units
+        k32.GetSystemTimes(ctypes.byref(idle), ctypes.byref(kernel), ctypes.byref(user))
+        total, idle_now = kernel.value + user.value, idle.value                                     # kernel time includes idle time
+        prev, last[0] = last[0], (total, idle_now)
+        if prev is None or total == prev[0]:
+            return 0.0
+        return max(0.0, min(1.0, 1.0 - (idle_now - prev[1]) / (total - prev[0])))
+    return read
+
+
+def memory_load():
+    """Physical memory in use, 0-1."""
+    m = _MemStatus()
+    m.length = ctypes.sizeof(m)
+    ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m))
+    return m.load / 100.0
+
+
+class Gauges:
+    """CPU load on the function-key row and memory use on the number row, drawn as bars of lit keys (green -> red).
+    Wired only (per-key real-time stream)."""
+
+    def __init__(self):
+        self.rows = {}
+        for k in keys.KEYS:
+            self.rows.setdefault(k[4], []).append((k[5], k[3]))        # row -> [(column, light index)]
+        for r in self.rows:
+            self.rows[r].sort()
+        self.cpu_read = cpu_load_reader()
+        self.cpu = self.mem = 0.0
+
+    def frame(self, t):
+        self.cpu = self.cpu * 0.8 + self.cpu_read() * 0.2           # smooth: GetSystemTimes deltas are jumpy at 20 fps
+        self.mem = memory_load()
+        out = {}
+        for row, value in ((0, self.cpu), (1, self.mem)):
+            cells = self.rows.get(row, [])
+            n = len(cells)
+            if not n:
+                continue
+            lit = int(round(value * n))
+            for i, (_, li) in enumerate(cells[:lit]):
+                out[li] = rgb(0.33 * (1 - i / max(1, n - 1)), 1, 1)
+        return out
+
+
 # ---------------------------------------------------------------------------------------------- runner
 class Runner:
     """Streams `effect.frame(t)` to the keyboard on a background thread until stop()."""

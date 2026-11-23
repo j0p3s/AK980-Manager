@@ -128,5 +128,49 @@ class Recorder(unittest.TestCase):
         self.assertTrue(len(ak980.Keyboard.macro_table([pages.events_of(m)])) >= 640)
 
 
+class Safety(unittest.TestCase):
+    def test_guard_blocks_bootloader_sequences(self):
+        for bad in (bytes([0xAA, 0x42, 0x89, 0x5A, 0xFF, 0x71, 0x62, 0xCC]), bytes([0x05, 0xAA, 0x55, 0x00]),
+                    bytes([0x00, 0xAA, 0x55, 0xA5, 0x5A, 0xFF, 0x00, 0x33, 0xCC])):
+            with self.assertRaises(ValueError):
+                ak980.guard(bad)
+        for good in (bytes([0x04, 0x18]), bytes([0x0B, 0x1C, 0, 4, 0, 100]), bytes([0x07, 0x10, 0])):
+            self.assertEqual(ak980.guard(good), good)
+
+    def test_clock_packet_matches_capture(self):
+        import datetime
+
+        class K(ak980.Keyboard):
+            def __init__(self):
+                pass
+
+            def transaction(self, *p):
+                self.p = p
+        k = K()
+        k.set_time(datetime.datetime(2026, 10, 29, 15, 7, 32))                 # a Thursday
+        self.assertEqual(k.p[2][:11].hex(), '00015a1a0a1d0f07200004')          # same bytes as a real capture (weekday 4)
+
+    def test_macro_budget(self):
+        import pages
+        one = {'name': 'a', 'events': [[4, True, 10, False]] * 10}
+        self.assertEqual(pages.macro_bytes([one]), (10 + 1) * 8)
+        self.assertEqual(pages.MACRO_BUDGET, 2700)
+
+
+class Extras(unittest.TestCase):
+    def test_battery_parse(self):
+        import battery
+        self.assertEqual(battery.parse('{"name":"AK980 PRO","connected":true,"battery":87}'), [('AK980 PRO', True, 87)])
+        self.assertEqual(battery.parse('[{"name":"x","connected":false,"battery":null}]'), [('x', False, None)])
+        self.assertEqual(battery.parse('junk'), [])
+        self.assertIn('No AK980', battery.summary([]))
+
+    def test_gauges_frame(self):
+        import effects
+        g = effects.Gauges()
+        out = g.frame(0)
+        self.assertTrue(all(isinstance(k, int) and len(v) == 3 for k, v in out.items()))
+
+
 if __name__ == '__main__':
     unittest.main()
