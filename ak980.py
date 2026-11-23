@@ -408,13 +408,19 @@ class Keyboard:
         return [(table[i], (table[i + 1], table[i + 2], table[i + 3])) for i in range(0, len(table) - 3, 4) if any(table[i:i + 4])]
 
     @staticmethod
-    def decode_colors(entries):
-        """{light_index: (r, g, b)} from parse_colors() output. The red byte is 2*r mod 256, so it fits two values (b/2 and b/2 + 128);
-        the brighter one is taken when the byte is 0x80 or more (a guess that suits saturated colours; green and blue are exact)."""
+    def decode_colors(entries, hint=None):
+        """{light_index: (r, g, b)} from parse_colors() output. The red byte is 2*r mod 256, so it fits two values (b/2 and b/2 + 128).
+        `hint` is {light_index: (r, g, b)} of what was last sent (or one (r, g, b) for every key); the candidate closest to its red is taken.
+        Without a hint the brighter one is taken when the byte is 0x80 or more (suits saturated colours; green and blue are exact)."""
         out = {}
         for idx, (rb, g, b) in entries:
             lo = rb >> 1
-            out[idx] = (lo | 0x80 if rb >= 0x80 else lo, g, b)
+            h = hint.get(idx) if isinstance(hint, dict) else hint
+            if h is not None:
+                r = lo if abs(lo - h[0]) <= abs((lo | 0x80) - h[0]) else lo | 0x80
+            else:
+                r = lo | 0x80 if rb >= 0x80 else lo
+            out[idx] = (r, g, b)
         return out
 
     def read_colors(self, timeout=2.0):

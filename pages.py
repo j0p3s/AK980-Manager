@@ -323,7 +323,8 @@ class LightingPage(Page):
                 if kb is None or not hasattr(kb, 'read_colors') or self.app.streaming or self.app.current != 'Lighting':
                     time.sleep(1.0)
                     continue
-                cols = ak980.Keyboard.decode_colors(ak980.Keyboard.parse_colors(kb.read_colors()))
+                hint = tuple(self.app.light['rgb']) if self.app.light.get('mode') == 'effect' and self.app.light.get('effect') in ('Static', 'Solid') and self.app.light.get('rgb') else None
+                cols = ak980.Keyboard.decode_colors(ak980.Keyboard.parse_colors(kb.read_colors()), hint)
                 self.app.post(self.kv.set_colors, {li: rgb_hex(c) for li, c in cols.items()})
             except OSError:
                 pass

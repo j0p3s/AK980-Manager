@@ -210,6 +210,12 @@ class Extras(unittest.TestCase):
         self.assertEqual(bar.position(70)[:2], (1, 'break'))
         self.assertIsNone(bar.position(130))
 
+    def test_decode_colors_hint(self):
+        e = ak980.Keyboard.parse_colors(bytes([1, 200, 5, 6]))                           # red byte 200 = 2*100 or 2*228-256
+        self.assertEqual(ak980.Keyboard.decode_colors(e)[1][0], 228)
+        self.assertEqual(ak980.Keyboard.decode_colors(e, (100, 5, 6))[1][0], 100)
+        self.assertEqual(ak980.Keyboard.decode_colors(e, {1: (230, 5, 6)})[1][0], 228)
+
     def test_decode_colors(self):
         d = ak980.Keyboard.decode_colors(ak980.Keyboard.parse_colors(bytes([1, 250, 253, 253, 2, 254, 0, 0, 3, 0x10, 5, 6])))
         self.assertEqual(d[1], (253, 253, 253))                      # static white at level 5 reads FA FD FD
