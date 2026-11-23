@@ -157,6 +157,33 @@ class Safety(unittest.TestCase):
         self.assertEqual(pages.MACRO_BUDGET, 2700)
 
 
+class Misc(unittest.TestCase):
+    def test_i18n_falls_back_to_english(self):
+        import i18n
+        i18n.set_language('Português')
+        try:
+            self.assertEqual(i18n.tr('Screen'), 'Ecrã')
+            self.assertEqual(i18n.tr('Something new'), 'Something new')
+        finally:
+            i18n.set_language('English')
+
+    def test_calibration(self):
+        ak980.set_calibration(1.0, 0.5, 2.0)
+        try:
+            self.assertEqual(ak980.calibrate((200, 200, 100)), (200, 100, 150))        # blue gain is capped at 1.5
+        finally:
+            ak980.set_calibration(1, 1, 1)
+
+    def test_diagnostics_has_no_personal_files(self):
+        import diagnostics
+        import zipfile
+        with tempfile.TemporaryDirectory() as d:
+            p = diagnostics.save(os.path.join(d, 'd.zip'))
+            names = zipfile.ZipFile(p).namelist()
+        self.assertIn('report.txt', names)
+        self.assertFalse(any(n in names for n in ('macros.json', 'keymap.json', 'live.json')))
+
+
 class Extras(unittest.TestCase):
     def test_battery_parse(self):
         import battery
@@ -172,6 +199,22 @@ class Extras(unittest.TestCase):
         f.t0 -= 61                                                 # time is up: the whole keyboard flashes
         self.assertTrue(f.frame(0) == {} or len(f.frame(0)) == len(f.all_keys))
         self.assertIsNotNone(f.finished_at)
+
+    def test_pomodoro_plan_and_bar(self):
+        import effects
+        plan = effects.make_plan(25, 5, 4, 15)
+        self.assertEqual(plan[:3], [('focus', 25), ('break', 5), ('focus', 25)])
+        self.assertEqual(plan[-1], ('break', 15))
+        bar = effects.PomodoroBar([('focus', 1), ('break', 1)])
+        self.assertEqual(bar.position(10)[:2], (0, 'focus'))
+        self.assertEqual(bar.position(70)[:2], (1, 'break'))
+        self.assertIsNone(bar.position(130))
+
+    def test_decode_colors(self):
+        d = ak980.Keyboard.decode_colors(ak980.Keyboard.parse_colors(bytes([1, 250, 253, 253, 2, 254, 0, 0, 3, 0x10, 5, 6])))
+        self.assertEqual(d[1], (253, 253, 253))                      # static white at level 5 reads FA FD FD
+        self.assertEqual(d[2], (255, 0, 0))
+        self.assertEqual(d[3], (8, 5, 6))
 
     def test_gauges_frame(self):
         import effects

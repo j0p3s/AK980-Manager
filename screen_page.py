@@ -50,8 +50,13 @@ class ScreenPage(Page):
                                 ('Move up', lambda: self.move(-1), 'ghost'), ('Move down', lambda: self.move(1), 'ghost'),
                                 ('Clear all', self.clear, 'ghost')):
             Btn(top, text, cmd, kind, height=32, size=9).pack(side='left', padx=(0, 6))
-        Btn(top, 'Sync clock', self.sync, height=32, size=9).pack(side='right')
-        Btn(top, 'Export GIF...', self.export, height=32, size=9).pack(side='right', padx=6)
+        top2 = tk.Frame(self, bg=C['bg'])
+        top2.pack(fill='x', pady=(6, 0))
+        for text, cmd in (('Slideshow...', self.add_slideshow), ('Text card...', self.add_text_card), ('Save to library...', self.save_library),
+                          ('Library...', self.open_library)):
+            Btn(top2, text, cmd, 'ghost', height=32, size=9).pack(side='left', padx=(0, 6))
+        Btn(top2, 'Sync clock', self.sync, height=32, size=9).pack(side='right')
+        Btn(top2, 'Export GIF...', self.export, height=32, size=9).pack(side='right', padx=6)
         body = tk.Frame(self, bg=C['bg'])
         body.pack(fill='both', expand=True, pady=10)
         left = Card(body, 'Frames')
@@ -98,6 +103,9 @@ class ScreenPage(Page):
         self.up.pack(side='right')
         label(self, 'Up to %d frames. Do not unplug the keyboard while uploading.' % ak980.Keyboard.MAX_FRAMES, 9, False, C['muted']).pack(
             anchor='w', pady=(6, 0))
+        self.count_label = label(self, '', 9, False, C['muted'])
+        self.count_label.pack(anchor='w')
+        self._upload_count()
         self._tool_changed()
         self.set_color(self.color)
 
@@ -115,6 +123,122 @@ class ScreenPage(Page):
             return
         for f in filedialog.askopenfilenames(filetypes=[('Images', '*.png *.jpg *.jpeg *.bmp *.gif')]):
             self._load_file(f)
+
+    def add_slideshow(self):
+        """Pictures one after another: each is repeated so it stays about N seconds (a frame lasts at most half a second)."""
+        if not self._need_pil():
+            return
+        from tkinter import simpledialog
+        from PIL import Image
+        files = filedialog.askopenfilenames(filetypes=[('Images', '*.png *.jpg *.jpeg *.bmp *.gif')])
+        if not files:
+            return
+        secs = simpledialog.askinteger('Slideshow', 'Seconds each picture stays on the screen (1-30):', initialvalue=3, minvalue=1, maxvalue=30,
+                                       parent=self)
+        if not secs:
+            return
+        per = max(1, int(round(secs * 1000 / MAX_DELAY)))
+        added = 0
+        for f in files:
+            try:
+                with Image.open(f) as im:
+                    base = im.convert('RGB').resize((W, H))
+            except Exception as e:
+                messagebox.showerror('Image', '%s: %s' % (f, e))
+                continue
+            for i in range(per):
+                if len(self.frames) >= ak980.Keyboard.MAX_FRAMES:
+                    messagebox.showinfo('Screen', 'The keyboard takes at most %d frames; the rest were not added.' % ak980.Keyboard.MAX_FRAMES)
+                    self._refresh(len(self.frames) - 1)
+                    return
+                self.frames.append(Frame('%s #%d' % (os.path.basename(f), i + 1), base.copy(), MAX_DELAY))
+                added += 1
+        self._refresh(len(self.frames) - 1 if self.frames else None)
+        self.app.status_msg('%d slideshow frames added' % added, 'ok')
+
+    def add_text_card(self):
+        """A card with a title and text, in the style of the live screen cards."""
+        if not self._need_pil():
+            return
+        from tkinter import simpledialog
+        import live
+        title = simpledialog.askstring('Text card', 'Title (small, on top):', initialvalue='Note', parent=self)
+        if title is None:
+            return
+        body = simpledialog.askstring('Text card', 'Text (up to three lines):', parent=self)
+        if not body:
+            return
+        if len(self.frames) >= ak980.Keyboard.MAX_FRAMES:
+            messagebox.showinfo('Screen', 'The screen already has the most frames the keyboard takes.')
+            return
+        accent = tuple(int(self.color[i:i + 2], 16) for i in (1, 3, 5))              # the colour picked in the editor
+        img = live.card_image(title[:20], body, '', accent if max(accent) > 60 else (124, 108, 255))
+        self.frames.append(Frame('Text: %s' % body[:16], img, 50))
+        self._refresh(len(self.frames) - 1)
+
+    def save_library(self):
+        import screenlib
+        from tkinter import simpledialog
+        if not self.frames:
+            messagebox.showinfo('Library', 'There are no frames to save.')
+            return
+        name = simpledialog.askstring('Library', 'Name for this animation:', parent=self)
+        if not name:
+            return
+        try:
+            screenlib.save(name, [f.img for f in self.frames], [f.delay for f in self.frames])
+            self.app.status_msg('Saved "%s" in the library' % name, 'ok')
+        except (ValueError, OSError) as e:
+            messagebox.showerror('Library', str(e))
+
+    def open_library(self):
+        import screenlib
+        win = tk.Toplevel(self)
+        win.title('Screen library')
+        win.configure(bg=C['bg'])
+        win.geometry('420x380')
+        win.transient(self.winfo_toplevel())
+        label(win, 'Your saved animations', 12, True, C['text'], C['bg']).pack(anchor='w', padx=16, pady=(14, 6))
+        lb = listbox(win, 10)
+        lb.pack(fill='both', expand=True, padx=16)
+        for n in screenlib.names():
+            lb.insert('end', n)
+
+        def selected():
+            s = lb.curselection()
+            return lb.get(s[0]) if s else None
+
+        def load(append=False):
+            n = selected()
+            if not n:
+                return
+            try:
+                imgs, delays = screenlib.load(n)
+            except Exception as e:
+                messagebox.showerror('Library', str(e), parent=win)
+                return
+            if not append:
+                if self.frames and not messagebox.askyesno('Library', 'Replace the current frames?', parent=win):
+                    return
+                self.frames = []
+            for i, (im, d) in enumerate(zip(imgs, delays)):
+                if len(self.frames) >= ak980.Keyboard.MAX_FRAMES:
+                    break
+                self.frames.append(Frame('%s #%d' % (n, i + 1), im.resize((W, H)), fit_delay(d)))
+            self._refresh(len(self.frames) - 1 if self.frames else None)
+            win.destroy()
+
+        def remove():
+            n = selected()
+            if n and messagebox.askyesno('Library', 'Delete "%s" from the library?' % n, parent=win):
+                screenlib.delete(n)
+                lb.delete(lb.curselection()[0])
+        row = tk.Frame(win, bg=C['bg'])
+        row.pack(fill='x', padx=16, pady=14)
+        Btn(row, 'Load (replace)', load, 'primary', height=32, size=9).pack(side='left')
+        Btn(row, 'Add to frames', lambda: load(True), 'ghost', height=32, size=9).pack(side='left', padx=6)
+        Btn(row, 'Delete', remove, 'danger', height=32, size=9).pack(side='left')
+        Btn(row, 'Close', win.destroy, 'ghost', height=32, size=9).pack(side='right')
 
     def add_video(self):
         """Add the first frames of a video (needs ffmpeg)."""
@@ -351,9 +475,23 @@ class ScreenPage(Page):
             imgs[0].convert('RGB').save(live.USER_GIF, save_all=True, append_images=[i.convert('RGB') for i in imgs[1:]], duration=delays, loop=0)
         except Exception:
             pass
+        import live
+        total, today = live.uploads()
+        if today >= 10 and not messagebox.askyesno('Screen', 'You have already uploaded %d times today (%d in total). Every upload erases flash memory on the '
+                                                   'keyboard, which wears it. Upload again?' % (today, total)):
+            return
         self.bar.configure(maximum=1, value=0)
         self.up.set_enabled(False)
 
         def prog(i, n):
             self.app.post(lambda: self.bar.configure(maximum=n, value=i))
-        self.app.run(lambda kb: kb.upload_screen(imgs, delays, prog), 'Screen uploaded', after=lambda: self.up.set_enabled(True))
+
+        def job(kb):
+            kb.upload_screen(imgs, delays, prog)
+            live.count_upload()
+        self.app.run(job, 'Screen uploaded', after=lambda: (self.up.set_enabled(True), self._upload_count()))
+
+    def _upload_count(self):
+        import live
+        total, today = live.uploads()
+        self.count_label.configure(text='Screen uploads: %d today, %d in total (each one erases flash memory)' % (today, total))

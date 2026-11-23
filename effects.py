@@ -215,62 +215,159 @@ def memory_load():
     return m.load / 100.0
 
 
-class Gauges:
-    """CPU load on the function-key row and memory use on the number row, drawn as bars of lit keys (green -> red).
-    Wired only (per-key real-time stream)."""
+def gpu_load():
+    """GPU load 0-1 from nvidia-smi when it is installed, else None."""
+    import shutil
+    import subprocess
+    exe = shutil.which('nvidia-smi') or 'C:/Windows/System32/nvidia-smi.exe'
+    try:
+        r = subprocess.run([exe, '--query-gpu=utilization.gpu', '--format=csv,noheader,nounits'], capture_output=True, text=True,
+                           timeout=3, creationflags=0x08000000)
+        return max(0.0, min(1.0, int(r.stdout.strip().splitlines()[0]) / 100.0))
+    except (OSError, ValueError, IndexError, subprocess.SubprocessError):
+        return None
 
-    def __init__(self):
+
+class Gauges:
+    """System gauges drawn on the keys (wired only): CPU load on the function-key row, memory on the number row, GPU on the QWERTY row
+    (NVIDIA, if nvidia-smi exists), as bars of lit keys (green to red). The speaker volume takes over the top row for a moment when it
+    changes, the space bar glows red while the microphone is muted in Windows, and the Delete key blinks in the minute before a meeting
+    (calendar from the Live screen settings). A background thread reads the slow sources so frames stay smooth."""
+
+    def __init__(self, gpu=True, volume=True, mic=True, ics=''):
+        self.opts = dict(gpu=gpu, volume=volume, mic=mic)
+        self.ics = ics
         self.rows = {}
         for k in keys.KEYS:
             self.rows.setdefault(k[4], []).append((k[5], k[3]))        # row -> [(column, light index)]
         for r in self.rows:
             self.rows[r].sort()
+        self.space = next((k[3] for k in keys.KEYS if k[1] == 'Space'), None)
+        self.delete = next((k[3] for k in keys.KEYS if k[1].lower() == 'del'), None)
         self.cpu_read = cpu_load_reader()
         self.cpu = self.mem = 0.0
+        self.gpu = None
+        self.volume = None
+        self.vol_changed = 0.0
+        self.mic_muted = False
+        self.meeting_soon = False
+        self.stop_flag = False
+        threading.Thread(target=self._poll, daemon=True).start()
+
+    def _poll(self):
+        import datetime
+        import live
+        import winaudio
+        audio = winaudio.AudioState()
+        last_gpu = last_meet = 0.0
+        try:
+            while not self.stop_flag:
+                t = time.time()
+                if self.opts['volume']:
+                    v = audio.volume()
+                    if v is not None and self.volume is not None and abs(v - self.volume) > 0.004:
+                        self.vol_changed = t
+                    self.volume = v if v is not None else self.volume
+                if self.opts['mic']:
+                    self.mic_muted = bool(audio.mic_muted())
+                if self.opts['gpu'] and t - last_gpu > 2:
+                    last_gpu, self.gpu = t, gpu_load()
+                if self.ics and t - last_meet > 30:
+                    last_meet = t
+                    ev = live.next_event(live.parse_ics(live.load_ics(self.ics)), datetime.datetime.now(), within_minutes=1.5)
+                    self.meeting_soon = bool(ev and (ev[0] - datetime.datetime.now()).total_seconds() > -60)
+                time.sleep(0.25)
+        finally:
+            audio.close()
+
+    def close(self):
+        self.stop_flag = True
+
+    def _bar(self, out, row, value, hue_from=0.33, hue_to=0.0):
+        cells = self.rows.get(row, [])
+        n = len(cells)
+        for i, (_, li) in enumerate(cells[:int(round(value * n))]):
+            out[li] = rgb(hue_from + (hue_to - hue_from) * i / max(1, n - 1), 1, 1)
 
     def frame(self, t):
         self.cpu = self.cpu * 0.8 + self.cpu_read() * 0.2           # smooth: GetSystemTimes deltas are jumpy at 20 fps
         self.mem = memory_load()
         out = {}
-        for row, value in ((0, self.cpu), (1, self.mem)):
-            cells = self.rows.get(row, [])
-            n = len(cells)
-            if not n:
-                continue
-            lit = int(round(value * n))
-            for i, (_, li) in enumerate(cells[:lit]):
-                out[li] = rgb(0.33 * (1 - i / max(1, n - 1)), 1, 1)
+        if self.opts['volume'] and self.volume is not None and time.time() - self.vol_changed < 2.5:
+            for i, (_, li) in enumerate(self.rows.get(0, [])[:int(round(self.volume * len(self.rows.get(0, []))))]):
+                out[li] = (60, 140, 255)                                # the volume, in blue, on the top row
+        else:
+            self._bar(out, 0, self.cpu)
+        self._bar(out, 1, self.mem)
+        if self.opts['gpu'] and self.gpu is not None:
+            self._bar(out, 2, self.gpu)
+        if self.mic_muted and self.space is not None:
+            out[self.space] = (255, 0, 0)
+        if self.meeting_soon and self.delete is not None and int(time.time() * 2) % 2 == 0:
+            out[self.delete] = (255, 170, 0)
         return out
 
 
-class FocusBar:
-    """Focus timer on the keys: the number row fills up (orange to green) over `minutes`, then the whole keyboard flashes green.
-    Wired only (per-key real-time stream)."""
+def make_plan(focus=25, brk=5, rounds=4, long_break=15):
+    """Pomodoro plan as [(kind, minutes)]: `rounds` focus blocks with short breaks between and a long break at the end (0 = none)."""
+    plan = []
+    for i in range(max(1, rounds)):
+        plan.append(('focus', max(1, focus)))
+        if i < rounds - 1 and brk > 0:
+            plan.append(('break', brk))
+    if rounds > 1 and long_break > 0:
+        plan.append(('break', long_break))
+    return plan
 
-    def __init__(self, minutes=25):
-        self.total = max(1, minutes) * 60.0
+
+class PomodoroBar:
+    """Focus / break timer on the keys: the number row fills up over each block (orange to green for focus, blue for a break), the
+    keyboard blinks when a block changes and flashes green at the end. Wired only (per-key real-time stream)."""
+
+    def __init__(self, plan):
+        self.plan = [(k, max(1, m) * 60.0) for k, m in plan] or [('focus', 60.0)]
+        self.total = sum(m for _, m in self.plan)
         self.t0 = time.time()
         self.cells = sorted((k[5], k[3]) for k in keys.KEYS if k[4] == 1)
         self.all_keys = [k[3] for k in keys.KEYS]
         self.finished_at = None
 
+    def position(self, el=None):
+        """(block index, kind, seconds into the block, block length) or None when everything is over."""
+        el = (time.time() - self.t0) if el is None else el
+        for i, (kind, length) in enumerate(self.plan):
+            if el < length:
+                return i, kind, el, length
+            el -= length
+        return None
+
     def remaining(self):
         return max(0.0, self.total - (time.time() - self.t0))
 
     def frame(self, t):
-        el = time.time() - self.t0
-        if el >= self.total:
+        pos = self.position()
+        if pos is None:
             if self.finished_at is None:
                 self.finished_at = time.time()
             if time.time() - self.finished_at < 10:                       # flash for 10 seconds, then go dark
                 return {li: (0, 255, 80) for li in self.all_keys} if int((time.time() - self.finished_at) * 2) % 2 == 0 else {}
             return {}
+        i, kind, into, length = pos
+        if i > 0 and into < 1.5:                                          # a new block: blink
+            return {li: (80, 160, 255) for li in self.all_keys} if int(into * 4) % 2 == 0 else {}
         n = len(self.cells)
-        lit = int(el / self.total * n) + 1
+        lit = int(into / length * n) + 1
         out = {}
-        for i, (_, li) in enumerate(self.cells[:lit]):
-            out[li] = rgb(0.07 + 0.26 * i / max(1, n - 1), 1, 1)
+        for j, (_, li) in enumerate(self.cells[:lit]):
+            out[li] = rgb(0.07 + 0.26 * j / max(1, n - 1), 1, 1) if kind == 'focus' else rgb(0.55, 0.8, 1)
         return out
+
+
+class FocusBar(PomodoroBar):
+    """A single focus block (see PomodoroBar)."""
+
+    def __init__(self, minutes=25):
+        super().__init__([('focus', minutes)])
 
 
 # ---------------------------------------------------------------------------------------------- runner

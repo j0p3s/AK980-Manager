@@ -42,6 +42,18 @@ def guard(packet):
     return packet
 
 
+# Colour calibration: gain per channel (1.0 = none) applied to every colour sent to the keys, to match how this unit's LEDs look.
+CALIBRATION = [1.0, 1.0, 1.0]
+
+
+def set_calibration(r=1.0, g=1.0, b=1.0):
+    CALIBRATION[:] = [max(0.3, min(1.5, float(r))), max(0.3, min(1.5, float(g))), max(0.3, min(1.5, float(b)))]
+
+
+def calibrate(rgb):
+    return tuple(max(0, min(255, int(round(c * k)))) for c, k in zip(rgb, CALIBRATION))
+
+
 k32 = ctypes.WinDLL('kernel32', use_last_error=True)
 hid = ctypes.WinDLL('hid')
 setupapi = ctypes.WinDLL('setupapi', use_last_error=True)
@@ -228,7 +240,7 @@ class Keyboard:
         """Send one frame on an open handle `h`. colors: {light_index: (r, g, b)}."""
         ent = bytearray()
         for li in self.RT_SLOTS:
-            r, g, b = colors.get(li, default)
+            r, g, b = calibrate(colors.get(li, default))
             ent += bytes([li, r, g, b])
         ent += bytes(512 - len(ent))
         def send(p):
@@ -311,7 +323,7 @@ class Keyboard:
         tab = bytearray(576)
         for k in _keys.KEYS:
             li = k[3]
-            r, g, b = colors.get(li, default)
+            r, g, b = calibrate(colors.get(li, default))
             tab[4 * li:4 * li + 4] = bytes([li, r, g, b])
         tab[574:576] = bytes([0xAA, 0x55])
         pk = [bytes([0x04, 0x18]), bytes([0x04, 0x23, 0, 0, 0, 0, 0, 0, 9])]
@@ -382,7 +394,7 @@ class Keyboard:
 
     def set_lighting(self, effect, rgb=(255, 0, 0), colorful=False, brightness=3, speed=3, direction=0):
         eid = EFFECT_ID[effect] if isinstance(effect, str) else int(effect)
-        r, g, b = rgb
+        r, g, b = calibrate(rgb)
         body = bytes([eid, r, g, b, 0, 0, 0, 0, 1 if colorful else 0,
                       max(0, min(5, brightness)), max(0, min(5, speed)), direction & 1, 0, 0, 0xAA, 0x55])
         self.transaction(bytes([0x04, 0x18]), bytes([0x04, 0x13, 0, 0, 0, 0, 0, 0, 1]), body, bytes([0x04, 0xF0]))
@@ -395,24 +407,55 @@ class Keyboard:
         """[(light_index, (r_byte, g, b))] from a read-back table; empty entries are skipped. r_byte is the raw red byte (see above)."""
         return [(table[i], (table[i + 1], table[i + 2], table[i + 3])) for i in range(0, len(table) - 3, 4) if any(table[i:i + 4])]
 
+    @staticmethod
+    def decode_colors(entries):
+        """{light_index: (r, g, b)} from parse_colors() output. The red byte is 2*r mod 256, so it fits two values (b/2 and b/2 + 128);
+        the brighter one is taken when the byte is 0x80 or more (a guess that suits saturated colours; green and blue are exact)."""
+        out = {}
+        for idx, (rb, g, b) in entries:
+            lo = rb >> 1
+            out[idx] = (lo | 0x80 if rb >= 0x80 else lo, g, b)
+        return out
+
     def read_colors(self, timeout=2.0):
-        """Raw read-back table (576 bytes) of the colours on the keys; experimental, see the note above."""
+        """Raw read-back table (576 bytes) of the colours on the keys. The header announces 9 data packets, then the keyboard's echo is
+        polled until it reports status 01 (ready); only then are the 9 reports read (earlier they are all zero); 04 02 closes the session."""
+        def put(h, payload):
+            if not hid.HidD_SetFeature(h, bytes([0]) + payload.ljust(64, b'\0')[:64], 65):
+                raise OSError('SetFeature failed (%d)' % ctypes.get_last_error())
+
+        def get(h):
+            rd = ctypes.create_string_buffer(65)
+            hid.HidD_GetFeature(h, rd, 65)
+            return rd.raw[1:]
         with self.lock:
             h = self._open()
             try:
-                self._xfer(h, bytes([0x04, 0xF5, 0, 0, 0, 0, 0, 0, 9]))
-                t0 = time.time()
+                put(h, bytes([0x04, 0x18]))                            # open a session first (the official app does)
+                time.sleep(0.04)
+                get(h)
+                put(h, bytes([0x04, 0xF5, 0, 0, 0, 0, 0, 0, 9, 0]))
+                status, t0 = 0, time.time()
+                while time.time() - t0 < timeout:
+                    time.sleep(0.02)
+                    r = get(h)
+                    if r[0] == 0x04 and r[1] == 0xF5:
+                        status = r[3]
+                        if status in (0x01, 0xFF):
+                            break
                 table = b''
-                while time.time() - t0 < timeout and len(table) < 576:
-                    rd = ctypes.create_string_buffer(65)
-                    hid.HidD_GetFeature(h, rd, 65)
-                    r = rd.raw[1:]
-                    if r[0] == 0x04 and r[1] in (0xF5, 0x02):          # an echo / acknowledgement, not data
+                if status == 0x01:
+                    t0 = time.time()
+                    while time.time() - t0 < timeout and len(table) < 576:
                         time.sleep(0.003)
-                        continue
-                    table += r
-                    time.sleep(0.003)
-                self._xfer(h, bytes([0x04, 0x02]))
+                        r = get(h)
+                        if r[0] == 0x04:                               # a repeated echo, not data
+                            continue
+                        table += r
+                time.sleep(0.035)                                      # the pacing matters: a commit right after the last read is ignored
+                put(h, bytes([0x04, 0x02]))
+                time.sleep(0.035)
+                get(h)
             finally:
                 k32.CloseHandle(h)
         return table[:576]
@@ -483,7 +526,7 @@ class DongleKeyboard:
 
     def set_lighting(self, effect, rgb=(255, 0, 0), colorful=False, brightness=3, speed=3, direction=0):
         eid = EFFECT_ID[effect] if isinstance(effect, str) else int(effect)
-        r, g, b = rgb
+        r, g, b = calibrate(rgb)
         payload = bytes([eid, r, g, b, 0, 0, 0, 0, 1 if colorful else 0,
                          max(0, min(5, brightness)), max(0, min(5, speed)), direction & 1, 0, 0, 0xAA, 0x55])
         with self.lock:
@@ -582,7 +625,7 @@ class DongleKeyboard:
         tab = bytearray(576)
         for k in _keys.KEYS:
             li = k[3]
-            r, g, b = colors.get(li, default)
+            r, g, b = calibrate(colors.get(li, default))
             tab[4 * li:4 * li + 4] = bytes([li, r, g, b])
         tab[574:576] = bytes([0xAA, 0x55])
         mode = bytes([0x05, 0x10, 0x00, 0x80] + [0] * 8 + [max(0, min(5, brightness)), 0, 0, 0, 0, 0xAA, 0x55])

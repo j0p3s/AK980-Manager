@@ -143,10 +143,22 @@ def is_dev_checkout():
     return os.path.exists(os.path.join(APP_DIR, '.git')) or bool(os.environ.get('AK980_NO_UPDATE'))
 
 
+def updates_mode():
+    """'Update automatically' (default), 'Let me know' or 'Off', from the program settings (read straight from the file)."""
+    try:
+        with open(os.path.join(DATA_DIR, 'settings.json'), encoding='utf-8') as f:
+            v = json.load(f).get('updates')
+        return v if v in ('Update automatically', 'Let me know', 'Off') else 'Update automatically'
+    except (OSError, ValueError):
+        return 'Update automatically'
+
+
 def self_update(progress=None, force=False):
     """Replace the program files with the newest version from GitHub. Returns 'updated', 'current', 'skipped' or 'offline'."""
     say = progress or (lambda m: None)
     if is_dev_checkout():
+        return 'skipped'
+    if not force and updates_mode() != 'Update automatically':
         return 'skipped'
     st = _state()
     if not force and time.time() - st.get('checked', 0) < SELF_UPDATE_EVERY:

@@ -26,6 +26,9 @@ class LivePage(Page):
         self.v_clock = tk.BooleanVar(value=s['sources']['clock'])
         self.fmt = tk.StringVar(value=s['date_format'])
         self.minutes = tk.IntVar(value=25)
+        self.brk = tk.IntVar(value=5)
+        self.rounds = tk.IntVar(value=1)
+        self.long_break = tk.IntVar(value=15)
         self.prev = tk.StringVar(value='Clock')
         self.photo = None
 
@@ -73,20 +76,42 @@ class LivePage(Page):
         self.lb.pack(fill='x')
         ar = tk.Frame(rem.body, bg=C['card'])
         ar.pack(fill='x', pady=(8, 0))
+        self.r_repeat = tk.StringVar(value=live.REPEATS[0])
+        ttk.Combobox(ar, values=list(live.REPEATS), textvariable=self.r_repeat, state='readonly', width=26).pack(side='left')
         self.r_at = ttk.Entry(ar, width=17)
         self.r_at.insert(0, (datetime.datetime.now() + datetime.timedelta(minutes=30)).strftime('%Y-%m-%d %H:%M'))
-        self.r_at.pack(side='left')
-        self.r_text = ttk.Entry(ar, width=22)
-        self.r_text.pack(side='left', padx=6)
-        Btn(ar, 'Add', self._add_reminder, 'ghost', height=28, width=60).pack(side='left')
-        Btn(ar, 'Delete', self._del_reminder, 'danger', height=28, width=70).pack(side='left', padx=6)
-        label(rem.body, 'When (YYYY-MM-DD HH:MM) and what the screen should say.', 9, False, C['muted'], C['card']).pack(anchor='w', pady=(6, 0))
+        self.r_at.pack(side='left', padx=6)
+        ar2 = tk.Frame(rem.body, bg=C['card'])
+        ar2.pack(fill='x', pady=(6, 0))
+        self.r_text = ttk.Entry(ar2, width=30)
+        self.r_text.pack(side='left')
+        Btn(ar2, 'Add', self._add_reminder, 'ghost', height=28, width=60).pack(side='left', padx=6)
+        Btn(ar2, 'Delete', self._del_reminder, 'danger', height=28, width=70).pack(side='left')
+        ar3 = tk.Frame(rem.body, bg=C['card'])
+        ar3.pack(fill='x', pady=(6, 0))
+        self.r_every = tk.IntVar(value=60)
+        label(ar3, 'Every', 9, False, C['muted'], C['card']).pack(side='left')
+        ttk.Spinbox(ar3, from_=5, to=480, increment=5, width=5, textvariable=self.r_every).pack(side='left', padx=4)
+        label(ar3, 'min, from', 9, False, C['muted'], C['card']).pack(side='left')
+        self.r_from = ttk.Entry(ar3, width=6)
+        self.r_from.insert(0, '09:00')
+        self.r_from.pack(side='left', padx=4)
+        label(ar3, 'to', 9, False, C['muted'], C['card']).pack(side='left')
+        self.r_to = ttk.Entry(ar3, width=6)
+        self.r_to.insert(0, '18:00')
+        self.r_to.pack(side='left', padx=4)
+        label(rem.body, 'Once: the full time (YYYY-MM-DD HH:MM). Every day: the time of day (the date is ignored). Every N minutes: uses the\nline above (every, from, to) and ignores the time. Then what the screen should say.', 9, False, C['muted'], C['card'],
+              justify='left').pack(anchor='w', pady=(6, 0))
         foc = Card(two, 'Focus timer')
         foc.pack(side='left', fill='y')
-        ttk.Spinbox(foc.body, from_=1, to=240, width=6, textvariable=self.minutes).pack(anchor='w')
-        label(foc.body, 'minutes', 10, False, C['muted'], C['card']).pack(anchor='w')
-        Btn(foc.body, 'Start focus', self._focus, 'primary', height=34, width=130).pack(anchor='w', pady=(10, 0))
-        label(foc.body, 'Shows a card now and another\nwhen the time is up.', 9, False, C['muted'], C['card'], justify='left').pack(anchor='w', pady=(8, 0))
+        for text, var, lo, hi in (('Focus (min)', self.minutes, 1, 240), ('Break (min)', self.brk, 0, 60), ('Rounds', self.rounds, 1, 12),
+                                  ('Long break (min)', self.long_break, 0, 120)):
+            fr = tk.Frame(foc.body, bg=C['card'])
+            fr.pack(anchor='w', pady=2)
+            ttk.Spinbox(fr, from_=lo, to=hi, width=5, textvariable=var).pack(side='left')
+            label(fr, text, 10, False, C['muted'], C['card']).pack(side='left', padx=8)
+        Btn(foc.body, 'Start', self._focus, 'primary', height=34, width=130).pack(anchor='w', pady=(10, 0))
+        label(foc.body, 'One card per block, one at the end.\nRounds 1 = one focus block.', 9, False, C['muted'], C['card'], justify='left').pack(anchor='w', pady=(8, 0))
 
         pv = Card(self, 'Preview')
         pv.pack(fill='x', pady=12)
@@ -159,19 +184,33 @@ class LivePage(Page):
     def _refresh_reminders(self):
         self.lb.delete(0, 'end')
         for r in self._settings()['reminders']:
-            self.lb.insert('end', '  %s   %s' % (r.get('at', ''), r.get('text', '')))
+            kind = r.get('repeat', 'Once')
+            when = r.get('at', '') if kind == 'Once' else ('daily %s' % r.get('at', '')[-5:] if kind == 'Every day' else
+                                                          'every %s min %s-%s' % (r.get('every', 60), r.get('from', '09:00'), r.get('to', '18:00')))
+            self.lb.insert('end', '  %s   %s' % (when, r.get('text', '')))
 
     def _add_reminder(self):
-        at, text = self.r_at.get().strip(), self.r_text.get().strip()
-        try:
-            datetime.datetime.strptime(at, '%Y-%m-%d %H:%M')
-        except ValueError:
-            messagebox.showerror('Reminder', 'Write the time as YYYY-MM-DD HH:MM, for example 2026-12-01 09:30.')
-            return
+        at, text, kind = self.r_at.get().strip(), self.r_text.get().strip(), self.r_repeat.get()
+        if kind == 'Once':
+            try:
+                datetime.datetime.strptime(at, '%Y-%m-%d %H:%M')
+            except ValueError:
+                messagebox.showerror('Reminder', 'Write the time as YYYY-MM-DD HH:MM, for example 2026-12-01 09:30.')
+                return
+        elif kind == 'Every day':
+            if live._hm(at[-5:], None) is None:
+                messagebox.showerror('Reminder', 'Write the time of day at the end, for example 09:30.')
+                return
         if not text:
             messagebox.showerror('Reminder', 'Write what the screen should say.')
             return
-        self._settings()['reminders'].append({'at': at, 'text': text})
+        rem = {'at': at, 'text': text, 'repeat': kind}
+        if kind != 'Once' and not kind == 'Every day':
+            try:
+                rem.update(every=max(5, int(self.r_every.get())), **{'from': self.r_from.get().strip(), 'to': self.r_to.get().strip()})
+            except (tk.TclError, ValueError):
+                return
+        self._settings()['reminders'].append(rem)
         self._save()
         self.r_text.delete(0, 'end')
         self._refresh_reminders()
@@ -190,8 +229,13 @@ class LivePage(Page):
         if not self.on.get():
             messagebox.showinfo('Focus timer', 'Turn on "Keep the screen up to date" first: the timer puts its cards on the screen.')
             return
-        self.app.live_worker.start_focus(m)
-        self.app.status_msg('Focus timer started: %d minutes' % m, 'ok')
+        import effects
+        try:
+            plan = effects.make_plan(m, int(self.brk.get()), int(self.rounds.get()), int(self.long_break.get()))
+        except (tk.TclError, ValueError):
+            return
+        self.app.live_worker.start_pomodoro(plan)
+        self.app.status_msg('Focus timer started: %d blocks, %d minutes' % (len(plan), sum(x for _, x in plan)), 'ok')
 
     # ---- preview / send
     def _card(self):

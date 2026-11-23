@@ -4,7 +4,8 @@ import json
 import os
 
 PATH = os.path.join(os.environ.get('APPDATA', '.'), 'AK980Manager', 'settings.json')
-DEFAULTS = {'close_to_tray': True, 'last_version': ''}
+DEFAULTS = {'close_to_tray': True, 'last_version': '', 'calibration': [1.0, 1.0, 1.0], 'language': 'English', 'welcome_done': False,
+            'updates': 'Update automatically'}
 
 
 def load(path=None):

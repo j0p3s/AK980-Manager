@@ -10,6 +10,9 @@ import xml.etree.ElementTree as ET
 import tkinter as tk
 from tkinter import colorchooser, filedialog, messagebox, ttk
 
+import threading
+import time
+
 import ak980
 import keys
 import layout
@@ -221,6 +224,10 @@ class Page(tk.Frame):
     def on_show(self):
         pass
 
+    def unsaved(self):
+        """A sentence about changes that are not saved or applied yet, or None; the main window asks before leaving the page."""
+        return None
+
 
 # ------------------------------------------------------------------------------------------------ lighting
 class LightingPage(Page):
@@ -262,6 +269,13 @@ class LightingPage(Page):
         prev.pack(fill='x', pady=(12, 0))
         self.kv = KeyboardView(prev.body, unit=30)
         self.kv.pack()
+        self.mirror = tk.BooleanVar(value=False)
+        self.mirror_msg = label(prev.body, '', 9, False, C['muted'], C['card'])
+        mrow = tk.Frame(prev.body, bg=C['card'])
+        mrow.pack(anchor='w', pady=(8, 0))
+        Toggle(mrow, 'Show the real colours from the keyboard (USB cable)', self.mirror, self._mirror_toggle).pack(side='left')
+        self.mirror_msg.pack(anchor='w')
+        self._mirror_on = False
         self._preview()
 
     def load_state(self):
@@ -286,6 +300,38 @@ class LightingPage(Page):
         self.app.light['rgb'] = list(hex_rgb(hexcol))
         self.colorful.set(False)
         self._changed()
+
+    def _mirror_toggle(self):
+        if self.mirror.get():
+            kb = self.app.kb
+            if kb is None or not hasattr(kb, 'read_colors'):
+                self.mirror.set(False)
+                self.mirror_msg.configure(text='Needs the USB cable (the 2.4G dongle cannot read the colours back).', fg=C['warn'])
+                return
+            self.mirror_msg.configure(text='Reading the colours the keys show (about once a second). Rainbow and similar effects are approximate.', fg=C['muted'])
+            if not self._mirror_on:
+                self._mirror_on = True
+                threading.Thread(target=self._mirror_loop, daemon=True).start()
+        else:
+            self.mirror_msg.configure(text='')
+            self._mirror_preview_back()
+
+    def _mirror_loop(self):
+        while self.mirror.get():
+            kb = self.app.kb
+            try:
+                if kb is None or not hasattr(kb, 'read_colors') or self.app.streaming or self.app.current != 'Lighting':
+                    time.sleep(1.0)
+                    continue
+                cols = ak980.Keyboard.decode_colors(ak980.Keyboard.parse_colors(kb.read_colors()))
+                self.app.post(self.kv.set_colors, {li: rgb_hex(c) for li, c in cols.items()})
+            except OSError:
+                pass
+            time.sleep(1.0)
+        self._mirror_on = False
+
+    def _mirror_preview_back(self):
+        self.after(1200, self._preview)
 
     def _changed(self):
         st = self.app.light
@@ -350,6 +396,10 @@ class PerKeyPage(Page):
         self.cur = c
         self.cur_sw.delete('all')
         theme.rrect(self.cur_sw, 0, 0, 44, 30, 8, fill=c, outline=C['line'])
+
+    def unsaved(self):
+        norm = lambda d: {int(k): str(v).lower() for k, v in d.items() if str(v).lower() != '#000000'}
+        return 'The per-key colours you painted are not applied to the keyboard yet (Apply to keyboard).'             if norm(self.colors) != norm(load_json(PERKEY_FILE, {})) else None
 
     def paint(self, li):
         self.colors[li] = self.cur
@@ -424,7 +474,14 @@ class ReactivePage(Page):
         self.pal = tk.StringVar(value='Classic')
         self.gain = tk.DoubleVar(value=1.0)
         self.scheme = tk.StringVar(value='Gradient')
+        self.g_gpu = tk.BooleanVar(value=True)
+        self.g_vol = tk.BooleanVar(value=True)
+        self.g_mic = tk.BooleanVar(value=True)
+        self.g_meet = tk.BooleanVar(value=True)
         self.focus_min = tk.IntVar(value=25)
+        self.focus_brk = tk.IntVar(value=5)
+        self.focus_rounds = tk.IntVar(value=1)
+        self.focus_long = tk.IntVar(value=15)
         self.bgcol = tk.StringVar(value='Off')
         self.amp = tk.DoubleVar(value=100)
         self.color = (124, 108, 255)
@@ -455,7 +512,8 @@ class ReactivePage(Page):
             'Equalizer': 'Whatever your PC plays becomes a spectrum analyser: bass on the left, treble on the right, '
                          'bars growing up from the bottom row.',
             'Bass pulse': 'The whole keyboard pulses with the bass of the music.',
-            'Focus timer': 'The number row fills up while time passes, then the whole keyboard flashes green. Needs the USB cable.',
+            'Focus timer': 'The number row fills up over each focus block (orange to green) and each break (blue); the keyboard blinks when a block changes '
+                           'and flashes green at the end. Needs the USB cable.',
             'System gauges': 'CPU load on the function-key row and memory use on the number row, as bars of lit keys (green to red). '
                              'Needs the USB cable.'}[m])
         for w in self.opts.body.winfo_children():
@@ -470,10 +528,19 @@ class ReactivePage(Page):
             label(col, 'Single colour', 10, False, C['muted'], C['card']).pack(anchor='w')
             Palette(col, self._set_color).pack(anchor='w', pady=(6, 0))
         elif m == 'Focus timer':
-            label(b, 'Minutes', 10, False, C['muted'], C['card']).pack(side='left')
-            ttk.Spinbox(b, from_=1, to=240, width=6, textvariable=self.focus_min).pack(side='left', padx=10)
+            for text, var, lo, hi in (('Focus (min)', self.focus_min, 1, 240), ('Break (min)', self.focus_brk, 0, 60),
+                                      ('Rounds', self.focus_rounds, 1, 12), ('Long break (min)', self.focus_long, 0, 120)):
+                label(b, text, 10, False, C['muted'], C['card']).pack(side='left', padx=(0, 6))
+                ttk.Spinbox(b, from_=lo, to=hi, width=5, textvariable=var).pack(side='left', padx=(0, 16))
         elif m == 'System gauges':
-            label(b, 'Top row (Esc to Delete): CPU load.   Number row (` to Backspace): memory in use.', 10, False, C['muted'], C['card']).pack(anchor='w')
+            label(b, 'Top row: CPU load.   Number row: memory in use.   QWERTY row: GPU load (NVIDIA only).', 10, False, C['muted'],
+                  C['card']).pack(anchor='w')
+            tg = tk.Frame(b, bg=C['card'])
+            tg.pack(anchor='w', pady=(10, 0))
+            for text, var in (('GPU row', self.g_gpu), ('Volume on the top row when it changes', self.g_vol),
+                              ('Space bar red while the microphone is muted', self.g_mic),
+                              ('Delete key blinks before a meeting (calendar on the Live screen page)', self.g_meet)):
+                Toggle(tg, text, var).pack(anchor='w', pady=2)
         else:
             Slider(b, 'Sensitivity', self.gain, 0.4, 4.0, 0.1, self._live, width=260, fmt='%.1f', unit='x').pack(side='left')
             col = tk.Frame(b, bg=C['card'])
@@ -524,9 +591,11 @@ class ReactivePage(Page):
             if self.mode.get() == 'Key glow':
                 eff = effects.KeyGlow(self.fade.get(), self.style.get(), self.color)
             elif self.mode.get() == 'System gauges':
-                eff = effects.Gauges()
+                ls = self.app.live_settings
+                eff = effects.Gauges(self.g_gpu.get(), self.g_vol.get(), self.g_mic.get(), ls.get('ics', '') if self.g_meet.get() else '')
             elif self.mode.get() == 'Focus timer':
-                eff = effects.FocusBar(int(self.focus_min.get() or 25))
+                eff = effects.PomodoroBar(effects.make_plan(int(self.focus_min.get() or 25), int(self.focus_brk.get() or 0),
+                                                            int(self.focus_rounds.get() or 1), int(self.focus_long.get() or 0)))
             else:
                 eff = effects.Equalizer('Bars' if self.mode.get() == 'Equalizer' else 'Bass pulse', self.pal.get(), self.gain.get(),
                                         self.scheme.get(), self.bgcol.get(), int(self.amp.get()))
@@ -542,7 +611,7 @@ class ReactivePage(Page):
         self.btn._draw()
         dev = getattr(eff, 'device', None)
         hint = (' - CPU on the top row, memory on the number row' if isinstance(eff, effects.Gauges)
-                else ' - the number row fills up' if isinstance(eff, effects.FocusBar) else ' - press some keys')
+                else ' - the number row fills up' if isinstance(eff, effects.PomodoroBar) else ' - press some keys')
         self.msg.configure(text='Running' + (' - listening to %s' % dev if dev else hint), fg=C['ok'])
         self.app.status_msg('Reactive effect running', 'ok')
 
@@ -765,6 +834,8 @@ class KeysPage(Page):
             return 1
 
     def on_show(self):
+        if getattr(self, '_applied', None) is None:                 # what is on the keyboard as far as we know: the saved map
+            self._applied = json.dumps(self.maps, sort_keys=True)
         self._refresh_layout()
         self._kind_changed()
         if self.sel is not None:
@@ -1014,6 +1085,12 @@ class KeysPage(Page):
         for c in w.winfo_children():
             self._refresh_toggles(c)
 
+    def unsaved(self):
+        now = json.dumps(self.maps, sort_keys=True)
+        if getattr(self, '_applied', None) is None:
+            self._applied = now
+        return 'Key changes were assigned but not applied to the keyboard yet (Apply).' if now != self._applied else None
+
     def assign(self):
         if self.sel is None:
             return
@@ -1068,6 +1145,7 @@ class KeysPage(Page):
             return
         self.maps = {'top': {}, 'fn': {}}
         save_json(KEYMAP_FILE, self.maps)
+        self._applied = json.dumps(self.maps, sort_keys=True)
         self._badges()
         if self.sel:
             self.select(self.sel)
@@ -1226,6 +1304,12 @@ class MacrosPage(Page):
             return max(10, min(500, int(self.delay.get())))
         except (tk.TclError, ValueError):
             return 40
+
+    def unsaved(self):
+        saved = events_of(self.app.macros[self.cur]) if self.cur is not None and self.cur < len(self.app.macros) else []
+        if self.events and [tuple(e) for e in self.events] != [tuple(e) for e in saved]:
+            return 'The macro you are editing has steps that are not saved (Save macro).'
+        return None
 
     # ---- steps
     def _show_steps(self):
@@ -1475,6 +1559,42 @@ class SystemPage(Page):
         self.bat_btn.pack(side='left')
         self.bat_msg = label(brow2, '', 10, False, C['muted'], C['card'], justify='left')
         self.bat_msg.pack(side='left', padx=14)
+        gen = Card(self, 'Language, updates and support')
+        gen.pack(fill='x', pady=(14, 0))
+        import appsettings
+        import i18n
+        grow = tk.Frame(gen.body, bg=C['card'])
+        grow.pack(fill='x')
+        label(grow, 'Language of the menu and page titles', 10, False, C['muted'], C['card']).grid(row=0, column=0, sticky='w', pady=4)
+        self.lang = ttk.Combobox(grow, values=list(i18n.LANGUAGES), state='readonly', width=18)
+        self.lang.set(appsettings.get('language'))
+        self.lang.grid(row=0, column=1, padx=14)
+        self.lang.bind('<<ComboboxSelected>>', lambda e: (appsettings.set('language', self.lang.get()),
+                                                          self.app.status_msg('Language saved: restart the program to apply it', 'ok')))
+        label(grow, 'Updates', 10, False, C['muted'], C['card']).grid(row=1, column=0, sticky='w', pady=4)
+        self.upd_mode = ttk.Combobox(grow, values=['Update automatically', 'Let me know', 'Off'], state='readonly', width=22)
+        self.upd_mode.set(appsettings.get('updates'))
+        self.upd_mode.grid(row=1, column=1, padx=14, sticky='w')
+        self.upd_mode.bind('<<ComboboxSelected>>', lambda e: (appsettings.set('updates', self.upd_mode.get()),
+                                                              self.app.status_msg('Update setting saved', 'ok')))
+        label(gen.body, 'Update automatically installs a new version while you are away from the PC and at start; Let me know only shows a bar '
+              'in this window; Off never looks by itself (the button below still works).', 9, False, C['muted'], C['card'], wraplength=720,
+              justify='left').pack(anchor='w', pady=(4, 8))
+        Btn(gen.body, 'Save diagnostics for a bug report...', self.save_diagnostics, 'ghost', height=34).pack(anchor='w')
+        cal = Card(self, 'Colour calibration')
+        cal.pack(fill='x', pady=(14, 0))
+        label(cal.body, 'If the colours on your keyboard look off (for example whites that look pink or green), lower the channel that is too strong. '
+              'It applies to the colours this program sends (effects, per-key colours, reactive effects).', 9, False, C['muted'], C['card'],
+              wraplength=720, justify='left').pack(anchor='w')
+        import appsettings
+        gains = appsettings.get('calibration')
+        self.cal_vars = [tk.IntVar(value=int(round(float(g) * 100))) for g in (gains if len(gains) == 3 else [1, 1, 1])]
+        for name, var in zip(('Red', 'Green', 'Blue'), self.cal_vars):
+            Slider(cal.body, name, var, 40, 120, 1, self._cal_changed, width=300, unit=' %').pack(anchor='w', pady=(8, 0))
+        crow = tk.Frame(cal.body, bg=C['card'])
+        crow.pack(anchor='w', pady=(10, 0))
+        Btn(crow, 'Show white', self._cal_white, 'ghost', height=32).pack(side='left')
+        Btn(crow, 'Reset', self._cal_reset, 'ghost', height=32).pack(side='left', padx=8)
         bk = Card(self, 'Backup')
         bk.pack(fill='x', pady=(14, 0))
         label(bk.body, 'Save everything the program keeps on this PC (keys, macros, lighting, per-key colours, profiles, live screen settings, '
@@ -1549,6 +1669,33 @@ class SystemPage(Page):
             ok, text = autostart.enable() if turn_on else autostart.disable()
             self.app.post(lambda: (self._auto_refresh((text, C['ok'] if ok else C['warn'])), self.auto_btn.set_enabled(True)))
         threading.Thread(target=job, daemon=True).start()
+
+    def save_diagnostics(self):
+        import diagnostics
+        f = filedialog.asksaveasfilename(defaultextension='.zip', filetypes=[('Diagnostics', '*.zip')], initialfile='AK980 Manager diagnostics.zip')
+        if f:
+            try:
+                diagnostics.save(f, 'USB cable' if self.app.kb and not getattr(self.app.kb, 'wireless', False) else
+                                 ('2.4G dongle' if self.app.kb else 'not connected'))
+                self.app.status_msg('Diagnostics saved: attach the file to your bug report (no macros, keys or calendar links inside)', 'ok')
+            except OSError as e:
+                messagebox.showerror('Diagnostics', 'Could not save: %s' % e)
+
+    def _cal_changed(self):
+        import appsettings
+        gains = [max(40, min(120, int(v.get()))) / 100.0 for v in self.cal_vars]
+        ak980.set_calibration(*gains)
+        appsettings.set('calibration', gains)
+
+    def _cal_white(self):
+        if self.app.require_kb():
+            self.app.run(lambda kb: kb.set_lighting('Static', (255, 255, 255), brightness=3), 'White shown (with your calibration)')
+
+    def _cal_reset(self):
+        for v in self.cal_vars:
+            v.set(100)
+        self._cal_changed()
+        self.app.push_lighting()
 
     def read_battery(self):
         import threading

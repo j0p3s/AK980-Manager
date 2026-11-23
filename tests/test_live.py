@@ -105,6 +105,51 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(len(log['up']), 1)
 
 
+class CounterTests(unittest.TestCase):
+    def test_counts_per_day(self):
+        import tempfile
+        d = os.path.join(tempfile.mkdtemp(), 'u.json')
+        day1, day2 = datetime.date(2026, 11, 23), datetime.date(2026, 11, 24)
+        self.assertEqual(live.count_upload(d, day1), (1, 1))
+        self.assertEqual(live.count_upload(d, day1), (2, 2))
+        self.assertEqual(live.count_upload(d, day2), (3, 1))
+        self.assertEqual(live.uploads(d, day1), (3, 2))
+
+
+class ReminderTests(unittest.TestCase):
+    def test_once_daily_and_every(self):
+        dt = datetime.datetime(2026, 11, 23, 10, 5)
+        once = {'at': '2026-11-23 10:00', 'text': 'a', 'repeat': 'Once'}
+        self.assertIsNotNone(live.reminder_due(once, dt, set()))
+        self.assertIsNone(live.reminder_due(once, datetime.datetime(2026, 11, 23, 11, 0), set()))
+        fired = {live.reminder_due(once, dt, set())}
+        self.assertIsNone(live.reminder_due(once, dt, fired))
+        daily = {'at': '2026-01-01 10:00', 'text': 'd', 'repeat': 'Every day'}
+        self.assertIsNotNone(live.reminder_due(daily, dt, set()))
+        self.assertIsNotNone(live.reminder_due(daily, datetime.datetime(2027, 3, 4, 10, 2), set()))
+        every = {'text': 'e', 'repeat': 'Every N minutes (work hours)', 'every': 30, 'from': '09:00', 'to': '18:00'}
+        self.assertIsNotNone(live.reminder_due(every, datetime.datetime(2026, 11, 23, 10, 31), set()))
+        self.assertIsNone(live.reminder_due(every, datetime.datetime(2026, 11, 23, 10, 45), set()))     # between slots
+        self.assertIsNone(live.reminder_due(every, datetime.datetime(2026, 11, 23, 20, 0), set()))      # after work hours
+
+
+class PomodoroTests(unittest.TestCase):
+    def test_plan_advances_and_ends(self):
+        w, c, log = make()
+        w.s['enabled'] = True
+        w.s['sources'] = {'clock': False, 'nowplaying': False, 'calendar': False}
+        w.start_pomodoro([('focus', 1), ('break', 1)])
+        w.step()
+        self.assertEqual(len(log['up']), 1)                          # focus card
+        c.t += 61
+        w.step()
+        self.assertEqual(len(log['up']), 2)                          # break card
+        c.t += 61
+        w.step()
+        self.assertEqual(len(log['up']), 3)                          # done card
+        self.assertIsNone(w.pomo)
+
+
 class SourceTests(unittest.TestCase):
     def test_ics(self):
         text = 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART:20261123T150000\r\nSUMMARY:Team\\, sync\r\nEND:VEVENT\r\nEND:VCALENDAR'

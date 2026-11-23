@@ -29,6 +29,41 @@ def now():
     return time.time()
 
 
+COUNTER = os.path.join(DATA, 'uploads.json')
+
+
+def count_upload(path=COUNTER, when=None):
+    """Record one screen upload (every one erases flash); returns (total, uploads today)."""
+    day = (when or datetime.date.today()).isoformat()
+    try:
+        with open(path, encoding='utf-8') as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        d = {}
+    d['total'] = int(d.get('total', 0)) + 1
+    days = d.get('days', {})
+    days[day] = int(days.get(day, 0)) + 1
+    d['days'] = dict(sorted(days.items())[-14:])               # keep two weeks
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(d, f)
+    except OSError:
+        pass
+    return d['total'], days[day]
+
+
+def uploads(path=COUNTER, when=None):
+    """(total, today) screen uploads made so far."""
+    day = (when or datetime.date.today()).isoformat()
+    try:
+        with open(path, encoding='utf-8') as f:
+            d = json.load(f)
+        return int(d.get('total', 0)), int(d.get('days', {}).get(day, 0))
+    except (OSError, ValueError):
+        return 0, 0
+
+
 # ---------------------------------------------------------------------------------------------- budget
 class Budget:
     """Token bucket: `per_day` tokens a day refill continuously, at most `burst` stored."""
@@ -156,6 +191,14 @@ def focus_card(kind, minutes, end=None):
     return card_image('Focus done', 'Time for a break', '', (60, 220, 130))
 
 
+def pomodoro_card(kind, number, of, minutes, end):
+    """Card for one block of a focus / break plan; `number` of `of` focus blocks (omitted when there is only one)."""
+    if kind == 'focus':
+        title = 'Focus' if of <= 1 else 'Focus %d of %d' % (number, of)
+        return card_image(title, '%d minutes' % minutes, 'until %s' % end.strftime('%H:%M'), (255, 150, 80))
+    return card_image('Break', '%d minutes' % minutes, 'until %s' % end.strftime('%H:%M'), (80, 170, 255))
+
+
 def fingerprint(img):
     return hashlib.sha1(img.tobytes()).hexdigest()
 
@@ -248,6 +291,49 @@ def load_ics(source):
         return ''
 
 
+# ---------------------------------------------------------------------------------------------- reminders
+REPEATS = ('Once', 'Every day', 'Every N minutes (work hours)')
+
+
+def _hm(text, default):
+    try:
+        h, m = text.strip().split(':')
+        return int(h) * 60 + int(m)
+    except ValueError:
+        return default
+
+
+def reminder_due(r, dt, fired):
+    """Key of the reminder occurrence that is due at `dt` (and not in `fired`), or None.
+    r: {'at': 'YYYY-MM-DD HH:MM' (a time of day is enough for daily ones), 'text', 'repeat': one of REPEATS,
+        'every': minutes, 'from': 'HH:MM', 'to': 'HH:MM'}. An occurrence stays due for a few minutes."""
+    text, kind = r.get('text', ''), r.get('repeat', 'Once')
+    if kind == 'Once':
+        try:
+            at = datetime.datetime.strptime(r.get('at', ''), '%Y-%m-%d %H:%M')
+        except ValueError:
+            return None
+        key = 'reminder:%s|%s' % (r.get('at'), text)
+        return key if at <= dt < at + datetime.timedelta(minutes=30) and key not in fired else None
+    if kind == 'Every day':
+        tod = _hm(r.get('at', '')[-5:], None) if r.get('at') else None
+        if tod is None:
+            return None
+        key = 'reminder:%s|%s|%s' % (dt.date(), r.get('at', '')[-5:], text)
+        now_min = dt.hour * 60 + dt.minute
+        return key if tod <= now_min < tod + 30 and key not in fired else None
+    if kind.startswith('Every N'):
+        every = max(5, int(r.get('every') or 60))
+        start, end = _hm(r.get('from', '09:00'), 540), _hm(r.get('to', '18:00'), 1080)
+        now_min = dt.hour * 60 + dt.minute
+        if not start <= now_min <= end:
+            return None
+        slot = start + (now_min - start) // every * every
+        key = 'reminder:%s|%d|%s' % (dt.date(), slot, text)
+        return key if now_min - slot < 10 and key not in fired else None
+    return None
+
+
 # ---------------------------------------------------------------------------------------------- settings
 DEFAULTS = {'enabled': False, 'plan': 'Balanced', 'date_format': 'DD/MM/YYYY', 'ics': '', 'hold_seconds': 120,
             'sources': {'clock': False, 'nowplaying': True, 'calendar': False}, 'reminders': [], 'tokens': None, 'updated': 0.0}
@@ -291,7 +377,7 @@ class Worker(threading.Thread):
         self.pending = None                 # (priority, key, image, temporary)
         self.shown = None                   # fingerprint of the card on the screen
         self.back_at = None                 # when to put the user's picture back
-        self.focus_end = None
+        self.pomo = None
         self.fired = set()                  # reminders already shown (by key)
         self.last_poll = {}
         self.status = 'Off'
@@ -315,11 +401,24 @@ class Worker(threading.Thread):
 
     pending_force = False
 
-    def start_focus(self, minutes):
-        end = datetime.datetime.fromtimestamp(self.clock()) + datetime.timedelta(minutes=minutes)
-        self.focus_end = end
-        self.offer('focus:start', focus_card('start', minutes, end))
+    def start_pomodoro(self, plan):
+        """plan: [(kind, minutes)] with kind 'focus' or 'break'. A card goes up at every block change and one at the end."""
+        self.pomo = {'plan': [(k, int(m)) for k, m in plan], 't0': self.clock(), 'shown': -1}
         self.wake.set()
+
+    def start_focus(self, minutes):
+        self.start_pomodoro([('focus', minutes)])
+
+    def pomo_position(self, t):
+        """(block index, kind, minutes, end datetime) of the block running at time t, or None when the plan is over / not started."""
+        if not self.pomo:
+            return None
+        end = self.pomo['t0']
+        for i, (kind, mins) in enumerate(self.pomo['plan']):
+            end += mins * 60
+            if t < end:
+                return i, kind, mins, datetime.datetime.fromtimestamp(end)
+        return None
 
     def poll(self):
         t = self.clock()
@@ -331,18 +430,24 @@ class Worker(threading.Thread):
                 self.last_poll[name] = t
                 return True
             return False
-        for r in self.s['reminders']:                               # {'at': 'YYYY-MM-DD HH:MM', 'text': ...}
-            try:
-                at = datetime.datetime.strptime(r.get('at', ''), '%Y-%m-%d %H:%M')
-            except ValueError:
-                continue
-            key = 'reminder:%s|%s' % (r.get('at'), r.get('text'))
-            if at <= dt < at + datetime.timedelta(minutes=30) and key not in self.fired:
+        for r in self.s['reminders']:
+            key = reminder_due(r, dt, self.fired)
+            if key:
                 self.fired.add(key)
                 self.offer(key, reminder_card(r.get('text', '')), temporary=True)
-        if self.focus_end and dt >= self.focus_end:
-            self.focus_end = None
-            self.offer('focus:end', focus_card('end', 0), temporary=True)
+        if self.pomo:
+            pos = self.pomo_position(t)
+            idx = pos[0] if pos else len(self.pomo['plan'])
+            if idx != self.pomo['shown']:
+                self.pomo['shown'] = idx
+                if pos is None:
+                    self.pomo = None
+                    self.offer('focus:end', focus_card('end', 0), temporary=True)
+                else:
+                    plan = self.pomo['plan']
+                    focus_total = sum(1 for k, _ in plan if k == 'focus')
+                    number = sum(1 for k, _ in plan[:idx + 1] if k == 'focus')
+                    self.offer('focus:%d' % idx, pomodoro_card(pos[1], number, focus_total, pos[2], pos[3]))
         if src.get('calendar') and self.s.get('ics') and due('calendar', 60):
             ev = next_event(parse_ics(load_ics(self.s['ics'])), dt)
             if ev:

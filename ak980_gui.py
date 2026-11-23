@@ -17,6 +17,8 @@ import tkinter as tk
 from tkinter import messagebox
 
 import ak980
+import home_pages
+import i18n
 import live
 import live_page
 import pages
@@ -27,10 +29,10 @@ import theme
 import tray
 from theme import C, Btn, label
 
-NAV = [('Lighting', '☀', pages.LightingPage), ('Per-key', '▦', pages.PerKeyPage), ('Reactive', '♫', pages.ReactivePage),
+NAV = [('Overview', '⌂', home_pages.OverviewPage), ('Lighting', '☀', pages.LightingPage), ('Per-key', '▦', pages.PerKeyPage), ('Reactive', '♫', pages.ReactivePage),
        ('Keys', '⌨', pages.KeysPage), ('Macros', '≣', pages.MacrosPage), ('Screen', '▭', screen_page.ScreenPage), ('Live screen', '◔', live_page.LivePage),
-       ('Profiles', '◧', profiles.ProfilesPage), ('System', '⚙', pages.SystemPage)]
-NAV_GROUPS = {'Lighting': 'LIGHTING', 'Keys': 'KEYS AND MACROS', 'Screen': 'DEVICE'}      # section heading above these items
+       ('Profiles', '◧', profiles.ProfilesPage), ('Connection', '⇄', home_pages.ConnectionPage), ('System', '⚙', pages.SystemPage)]
+NAV_GROUPS = {'Overview': 'HOME', 'Lighting': 'LIGHTING', 'Keys': 'KEYS AND MACROS', 'Screen': 'DEVICE'}      # section heading above these items
 NO_WINDOW = 0x08000000
 APP_ID = 'j0p3s.AK980Manager'       # own taskbar identity, so Windows shows this program's icon and not python.exe's
 
@@ -83,7 +85,7 @@ class NavItem(tk.Frame):
         self.bar = tk.Frame(self, bg=C['side'], width=3)
         self.bar.pack(side='left', fill='y')
         self.icon = tk.Label(self, text=icon, font=('Segoe UI Symbol', 13), fg=C['muted'], bg=C['side'], width=2)
-        self.icon.pack(side='left', padx=(14, 4), pady=11)
+        self.icon.pack(side='left', padx=(14, 4), pady=8)
         self.txt = tk.Label(self, text=text, font=theme.font(11), fg=C['muted'], bg=C['side'])
         self.txt.pack(side='left')
         for w in (self, self.icon, self.txt):
@@ -168,6 +170,9 @@ class App(tk.Tk):
         self.cv = threading.Condition()
         self._q = queue.Queue()
         self.macros = pages.load_json(pages.MACRO_FILE, [])
+        import appsettings
+        ak980.set_calibration(*appsettings.get('calibration'))
+        i18n.set_language(appsettings.get('language'))
         self.live_settings = live.load_settings()
         self.live_worker = None
         self.light = {'effect': 'Static', 'rgb': [255, 0, 0], 'colorful': False, 'bright': 3, 'speed': 3, 'direction': 0}
@@ -179,6 +184,7 @@ class App(tk.Tk):
         self.tray = tray.Tray(_resource('assets/icon.ico'), 'Ajazz AK980 V2 Manager', lambda: self.post(self.restore), lambda: self.post(self.quit_app))
         self.tray.start()
         self.after(4000, self._announce_update)
+        self.after(1500, self._welcome)
         if getattr(sys, 'frozen', False):
             self.after(25000, self._check_update)
         self.pc_listener = pcactions.Listener(lambda n: self.post(self._pc_key, n))
@@ -225,11 +231,12 @@ class App(tk.Tk):
         self.nav = {}
         for i, (name, icon, cls) in enumerate(NAV):
             if name in NAV_GROUPS:
-                label(side, NAV_GROUPS[name], 8, True, C['muted'], C['side']).pack(anchor='w', padx=18, pady=(14 if i else 0, 4))
-            n = NavItem(side, name, icon, lambda name=name: self.show(name))
+                label(side, i18n.tr(NAV_GROUPS[name]), 8, True, C['muted'], C['side']).pack(anchor='w', padx=18, pady=(14 if i else 0, 4))
+            n = NavItem(side, i18n.tr(name), icon, lambda name=name: self.show(name))
             n.pack(fill='x')
             self.nav[name] = n
-            self.bind_all('<Control-Key-%d>' % (i + 1), lambda e, name=name: self.show(name))        # Ctrl+1 .. Ctrl+8
+            if i < 10:                                              # Ctrl+1 .. Ctrl+9, Ctrl+0 for the tenth page
+                self.bind_all('<Control-Key-%s>' % '1234567890'[i], lambda e, name=name: self.show(name))
         label(side, 'Unofficial - not affiliated\nwith AJAZZ', 8, False, C['muted'], C['side'], justify='left').pack(side='bottom', anchor='w', padx=18, pady=14)
 
         main = tk.Frame(self, bg=C['bg'])
@@ -266,7 +273,7 @@ class App(tk.Tk):
         self.current = None
         self._draw_pill(False)
         self.status_msg('Starting...', 'info')
-        self.show('Lighting')
+        self.show('Overview')
 
     def _on_wheel(self, e):
         """Mouse wheel scrolls the page unless the pointer is over a widget that scrolls by itself."""
@@ -274,6 +281,10 @@ class App(tk.Tk):
             self.hosts[self.current].wheel(e.delta)
 
     def show(self, name):
+        if self.current and name != self.current:
+            msg = self.pages[self.current].unsaved()
+            if msg and not messagebox.askyesno('Unsaved changes', '%s\n\nLeave this page anyway?' % msg):
+                return
         if self.current:
             self.hosts[self.current].pack_forget()
             self.nav[self.current].select(False)
@@ -282,7 +293,7 @@ class App(tk.Tk):
         self.hosts[name].pack(fill='both', expand=True)
         pg.on_show()
         self.nav[name].select(True)
-        self.h_title.configure(text=pg.title)
+        self.h_title.configure(text=i18n.tr(pg.title))
         self.h_sub.configure(text=pg.subtitle)
 
     def _draw_pill(self, ok):
@@ -391,6 +402,32 @@ class App(tk.Tk):
         if not self.note.winfo_ismapped():
             self.note.pack(fill='x', padx=28, pady=(4, 0), before=self.content)
 
+    def _welcome(self):
+        """First start: a short guide (shown once)."""
+        import appsettings
+        if appsettings.get('welcome_done') or '--startup' in sys.argv:
+            return
+        win = tk.Toplevel(self)
+        win.title('Welcome')
+        win.configure(bg=C['bg'])
+        win.geometry('520x400')
+        win.transient(self)
+        label(win, 'Welcome', 18, True, C['text'], C['bg']).pack(anchor='w', padx=24, pady=(20, 4))
+        label(win, 'Control software for the AJAZZ AK980 (V2) PRO keyboard, in English. Three quick things:', 10, False, C['muted'], C['bg'],
+              wraplength=470, justify='left').pack(anchor='w', padx=24)
+        steps = ('1.  Close the official AJAZZ app. It blocks this program (a banner offers to close it).',
+                 '2.  Connect the keyboard: the USB cable gives you everything; the 2.4G dongle gives lighting, keys, macros and music.',
+                 '3.  Start with the Overview page. Changes to keys, macros and per-key colours are sent when you press Apply or Save.',
+                 'Nothing here flashes new firmware, and the screen is only written when you upload to it.')
+        for t in steps:
+            label(win, t, 10, False, C['text'], C['bg'], wraplength=470, justify='left').pack(anchor='w', padx=24, pady=(10, 0))
+
+        def done():
+            appsettings.set('welcome_done', True)
+            win.destroy()
+        Btn(win, 'Got it', done, 'primary', height=36, width=120).pack(anchor='e', padx=24, pady=20)
+        win.protocol('WM_DELETE_WINDOW', done)
+
     def _announce_update(self):
         """After an update, say once which version is now running."""
         try:
@@ -414,22 +451,47 @@ class App(tk.Tk):
             self.post(lambda: messagebox.showinfo("What's new in %s" % VERSION, text))
         threading.Thread(target=work, daemon=True).start()
 
+    def _idle_seconds(self):
+        """Seconds since the last keyboard or mouse input on this PC."""
+        class LASTINPUTINFO(ctypes.Structure):
+            _fields_ = [('cbSize', ctypes.c_uint), ('dwTime', ctypes.c_uint)]
+        info = LASTINPUTINFO()
+        info.cbSize = ctypes.sizeof(info)
+        if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(info)):
+            return 0.0
+        return (ctypes.windll.kernel32.GetTickCount() - info.dwTime) / 1000.0
+
     def _check_update(self):
-        """Packaged program: look for a newer release now and then and offer it inside the window (the update itself is the one the
-        program already does at start: it downloads, verifies the checksum, swaps its folder and restarts)."""
+        """Packaged program: look for a newer release now and then. 'Let me know' shows a bar in this window; 'Update automatically'
+        installs it while nobody is using the PC (no effect running, five minutes without input); 'Off' does nothing. The install is
+        the one the program already does at start: download, checksum, swap its folder, restart."""
+        import appsettings
         import bootstrap
         from version import VERSION
+        mode = appsettings.get('updates')
+        retry = 6 * 3600 * 1000
 
         def work():
             info = bootstrap.release_info()
             if info and bootstrap.is_newer(info[0], VERSION):
-                self.post(lambda: self._note('Version %s is available.' % info[0].lstrip('vV'), [('Update now', self._update_now)]))
-        threading.Thread(target=work, daemon=True).start()
-        self.after(6 * 3600 * 1000, self._check_update)
+                self.post(lambda: self._update_found(info[0], mode))
+        if mode != 'Off':
+            threading.Thread(target=work, daemon=True).start()
+        self.after(retry, self._check_update)
 
-    def _update_now(self):
+    def _update_found(self, tag, mode):
+        if mode == 'Update automatically':
+            if self.streaming or self._idle_seconds() < 300:
+                self._note('Version %s is available; it installs when you are away from the PC.' % tag.lstrip('vV'), [('Update now', self._update_now)])
+                self.after(10 * 60 * 1000, lambda: self._update_found(tag, mode))
+                return
+            self._update_now(auto=True)
+            return
+        self._note('Version %s is available.' % tag.lstrip('vV'), [('Update now', self._update_now)])
+
+    def _update_now(self, auto=False):
         """Restart the program; at start it installs the newer release and comes back up."""
-        if self.streaming and not messagebox.askyesno('Update', 'An effect is running; the update stops it. Continue?'):
+        if self.streaming and not auto and not messagebox.askyesno('Update', 'An effect is running; the update stops it. Continue?'):
             return
         subprocess.Popen('ping -n 4 127.0.0.1 >nul & start "" "%s"' % sys.executable, shell=True, creationflags=NO_WINDOW, close_fds=True)
         self.quit_app()
@@ -442,6 +504,7 @@ class App(tk.Tk):
 
     def _live_upload(self, img):
         self._live_kb().upload_screen([img], [100])
+        live.count_upload()
 
     def _live_restore(self):
         """Put the user's own screen picture back (the animation saved when they uploaded it on the Screen page)."""
@@ -452,6 +515,7 @@ class App(tk.Tk):
             frames = [f.convert('RGB').copy() for f in ImageSequence.Iterator(g)]
             delays = [max(2, int(f.info.get('duration', 100))) for f in ImageSequence.Iterator(g)]
         self._live_kb().upload_screen(frames, delays)
+        live.count_upload()
 
     def save_macros(self):
         pages.save_json(pages.MACRO_FILE, self.macros)
