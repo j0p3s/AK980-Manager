@@ -111,10 +111,15 @@ class Recorder(unittest.TestCase):
         c.mouse(0x0201, 0.5)
         c.key(0x38, False, True, 0.75)            # still held when recording ends -> released automatically
         ev = c.finish(0.75)
-        self.assertEqual(ev, [(4, True, 10, False), (4, False, 100, False), (1, True, 400, True),
-                              (226, True, 250, False), (1, False, 10, True), (226, False, 10, False)])
+        self.assertEqual(ev, [(4, True, 100, False), (4, False, 400, False), (1, True, 250, True),
+                              (226, True, 10, False), (1, False, 10, True), (226, False, 10, False)])
         self.assertEqual(recorder.scan_to_usage(0x48, True), 82)       # Up arrow
         self.assertEqual(recorder.scan_to_usage(0x48, False), 96)      # keypad 8
+
+    def test_wait_extends_previous_event(self):
+        import pages
+        self.assertEqual(pages.macro_events('a{wait 500}b', 40),
+                         [(4, True, 40, False), (4, False, 540, False), (5, True, 40, False), (5, False, 40, False)])
 
     def test_recorded_macro_events(self):
         import pages

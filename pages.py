@@ -105,15 +105,16 @@ def macro_events(text, delay):
     """Events (usage, is_down, delay_ms, is_mouse) that type text on the active Windows layout (capitals, symbols and accents use
     Shift / AltGr / dead keys, so the result matches what the user's layout types). Mouse clicks: {click} {rightclick}
     {middleclick}; extra pause: {wait 500}; literal braces: {{ and }}."""
-    ev, extra = [], 0
+    ev = []
 
     def add(u, down, mouse=False):
-        nonlocal extra
-        ev.append((u, down, delay + extra, mouse))
-        extra = 0
+        ev.append((u, down, delay, mouse))
     for kind, val in _parse_macro(text):
         if kind == 'wait':
-            extra += val
+            if ev:                                  # the keyboard waits AFTER an event, so a pause extends the previous one
+                e = list(ev[-1])
+                e[2] = min(65535, e[2] + val)
+                ev[-1] = tuple(e)
         elif kind == 'mouse':
             add(val, True, True)
             add(val, False, True)
@@ -1097,7 +1098,7 @@ def event_label(e, names=None):
         name = MOUSE_NAMES.get(usage, 'button %d' % usage)
     else:
         name = USAGE_NAMES.get(usage) if usage in SPECIAL_USAGES else (names or {}).get(usage, USAGE_NAMES.get(usage, 'key %d' % usage))
-    return '%-14s %-8s wait %d ms' % (name, 'press' if down else 'release', delay)
+    return '%-14s %-8s then wait %d ms' % (name, 'press' if down else 'release', delay)
 
 
 def events_summary(ev):
@@ -1151,6 +1152,8 @@ class MacrosPage(Page):
         label(trow, 'Type text', 10, False, C['muted'], C['card']).pack(side='left')
         self.text = ttk.Entry(trow, width=34)
         self.text.pack(side='left', padx=10)
+        self.text.bind('<Return>', lambda e: self.add_text())          # Enter adds the typed text to the steps
+        self.name.bind('<Return>', lambda e: self.text.focus_set())
         self.delay = tk.IntVar(value=40)
         Btn(trow, 'Add to steps', self.add_text, 'ghost', height=30, width=110).pack(side='left')
         label(trow, 'Key delay', 10, False, C['muted'], C['card']).pack(side='left', padx=(14, 4))
@@ -1289,8 +1292,8 @@ class MacrosPage(Page):
 
     def _rec_tick(self):
         if self.recorder is not None:
-            self.rec_msg.configure(text='Recording... %d events so far. Go to another program, use the keys, then come back and press Stop.'
-                                   % self.recorder.count, fg=C['bad'])
+            self.rec_msg.configure(text='RECORDING (%d events). Click into ANOTHER program (e.g. Notepad) and use the keys there; this window is '
+                                   'not recorded. Come back and press Stop.' % self.recorder.count, fg=C['bad'])
             self.after(300, self._rec_tick)
 
     # ---- the list of macros

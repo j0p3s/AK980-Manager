@@ -42,12 +42,17 @@ class Collector:
         self.full = False
 
     def _add(self, usage, down, mouse, now):
+        """The keyboard applies an event's delay AFTER the event (verified: a press recorded with a long wait before it kept the
+        key held and auto-repeated), so the gap to this event is stored on the PREVIOUS event."""
         if len(self.events) >= MAX_EVENTS:
             self.full = True
             return
-        delay = 10 if self.last is None else max(10, min(65535, int((now - self.last) * 1000)))
+        if self.events and self.last is not None:
+            prev = list(self.events[-1])
+            prev[2] = max(10, min(65535, int((now - self.last) * 1000)))
+            self.events[-1] = tuple(prev)
         self.last = now
-        self.events.append((usage, down, delay, mouse))
+        self.events.append((usage, down, 10, mouse))
 
     def key(self, scan, extended, down, now):
         u = scan_to_usage(scan, extended)

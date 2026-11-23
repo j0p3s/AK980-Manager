@@ -68,6 +68,7 @@ All multi-packet tables end with the two bytes `AA 55`.
 ### Macros — header `04 15 00 00 00 00 00 00 N`, then N packets (N = len//64 + 2)
 
 * Directory: 4-byte entries `[offset_lo, offset_hi, 0, 0]` at `4*n` (100 slots); macro data starts at offset 400.
+* **The delay of an event is applied AFTER that event** (verified 2026-11-23: a recorded key press with 1.6 s in its delay field stayed held and auto-repeated ~30 times). So a pause between two keys goes on the *release* of the first.
 * Each macro: 8-byte header `[2*events, 0 ×7]` followed by one 8-byte record per event:
   `[0, 0, hid_usage, flag, delay_lo, delay_hi, 0, 0x50]`, flag `0xB0` = key down, `0x30` = key up, delay = ms before the
   event (the app shows 0 for the last event but stores 10, so the minimum is 10). Total length = `(end//64 + 2) * 64`, `AA 55` last.
