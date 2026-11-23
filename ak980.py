@@ -681,8 +681,31 @@ class DongleKeyboard:
                 time.sleep(max(0.0, n / fps - (time.time() - t0)))
             self.music_frame([0] * 19)
 
-    def stream_realtime(self, *a, **k):
-        raise OSError('Per-key real-time effects need the USB cable; over 2.4G only the Equalizer works.')
+    def stream_realtime(self, frame_fn, seconds, fps=20, stop=None, min_interval=1.2):
+        """Slow per-key effects over 2.4G: there is no real-time stream on the dongle, so the per-key colour table (`05 10 00 80` + cmd `14`
+        bulk, the same as set_user_lighting) is rewritten whenever the frame changed, at most once every `min_interval` seconds (a write
+        takes ~0.6 s). Fine for bars and timers that change slowly; too slow for beat-driven effects. frame_fn is polled ~4x a second."""
+        import keys as _keys
+        mode = bytes([0x05, 0x10, 0x00, 0x80] + [0] * 8 + [5, 0, 0, 0, 0, 0xAA, 0x55])
+        last, sent_at, first = None, 0.0, True
+        t0 = time.time()
+        with self.lock:
+            while time.time() - t0 < seconds and not (stop and stop.is_set()):
+                colors = frame_fn(time.time() - t0)
+                cur = {li: tuple(int(c) // 16 for c in col) for li, col in colors.items() if max(col) > 0}
+                if cur != last and time.time() - sent_at >= min_interval:
+                    tab = bytearray(576)
+                    for k in _keys.KEYS:
+                        li = k[3]
+                        r, g, b = calibrate(colors.get(li, (0, 0, 0)))
+                        tab[4 * li:4 * li + 4] = bytes([li, r, g, b])
+                    tab[574:576] = bytes([0xAA, 0x55])
+                    for _ in range(2 if first else 1):
+                        self._send(mode)
+                        self._bulk_table(0x14, tab)
+                        time.sleep(0.3)
+                    last, sent_at, first = cur, time.time(), False
+                time.sleep(0.25)
 
     upload_screen = realtime_frame = _unsupported
 

@@ -363,7 +363,7 @@ class App(tk.Tk):
             try:
                 self.kb = ak980.connect()
                 self._draw_pill(True)
-                self.status_msg('Keyboard connected' + (' over 2.4G (screen and real-time effects need the USB cable)' if getattr(self.kb, 'wireless', False) else ''), 'ok')
+                self.status_msg('Keyboard connected' + (' over 2.4G (the screen, Key glow and Bass pulse need the USB cable)' if getattr(self.kb, 'wireless', False) else ''), 'ok')
             except OSError:
                 self._draw_pill(False)
                 self.status_msg('Keyboard not found - plug it in with the USB cable (wired mode).', 'err')
@@ -416,7 +416,7 @@ class App(tk.Tk):
         label(win, 'Control software for the AJAZZ AK980 (V2) PRO keyboard, in English. Three quick things:', 10, False, C['muted'], C['bg'],
               wraplength=470, justify='left').pack(anchor='w', padx=24)
         steps = ('1.  Close the official AJAZZ app. It blocks this program (a banner offers to close it).',
-                 '2.  Connect the keyboard: the USB cable gives you everything; the 2.4G dongle gives lighting, keys, macros and music.',
+                 '2.  Connect the keyboard: the USB cable gives you everything; the 2.4G dongle gives lighting, keys, macros, music, timers and gauges.',
                  '3.  Start with the Overview page. Changes to keys, macros and per-key colours are sent when you press Apply or Save.',
                  'Nothing here flashes new firmware, and the screen is only written when you upload to it.')
         for t in steps:

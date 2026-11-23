@@ -509,14 +509,14 @@ class ReactivePage(Page):
     def _mode_changed(self):
         m = self.mode.get()
         self.desc.configure(text={
-            'Key glow': 'Every key you press lights up and fades out; the rest of the keyboard stays dark.',
+            'Key glow': 'Every key you press lights up and fades out; the rest of the keyboard stays dark. Needs the USB cable.',
             'Equalizer': 'Whatever your PC plays becomes a spectrum analyser: bass on the left, treble on the right, '
                          'bars growing up from the bottom row.',
-            'Bass pulse': 'The whole keyboard pulses with the bass of the music.',
+            'Bass pulse': 'The whole keyboard pulses with the bass of the music. Needs the USB cable.',
             'Focus timer': 'The number row fills up over each focus block (orange to green) and each break (blue); the keyboard blinks when a block changes '
-                           'and flashes green at the end. Needs the USB cable.',
+                           'and flashes green at the end. Over 2.4G it redraws about once a second.',
             'System gauges': 'CPU load on the function-key row and memory use on the number row, as bars of lit keys (green to red). '
-                             'Needs the USB cable.'}[m])
+                             'Over 2.4G it redraws about once a second.'}[m])
         for w in self.opts.body.winfo_children():
             w.destroy()
         b = self.opts.body

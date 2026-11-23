@@ -394,8 +394,13 @@ class Runner:
             return colors
         try:
             if getattr(self.kb, 'wireless', False):         # 2.4G: the keyboard draws the equaliser from 19 column levels
-                if getattr(self.effect, 'mode', None) != 'Bars' or not hasattr(self.effect, 'level'):
-                    raise OSError('This effect needs the USB cable. Over 2.4G only the Equalizer works.')
+                if isinstance(self.effect, KeyGlow):
+                    raise OSError('Key glow needs the USB cable (it reacts to every key press).')
+                if not isinstance(self.effect, Equalizer):          # gauges, timers: redrawn slowly as a per-key table
+                    self.kb.stream_realtime(frame, 10 ** 9, stop=self.stop_event)
+                    return
+                if self.effect.mode == 'Bass pulse':
+                    raise OSError('Bass pulse is too fast for 2.4G - use the USB cable, or the Bars equalizer.')
 
                 def levels(t):
                     frame(t)
