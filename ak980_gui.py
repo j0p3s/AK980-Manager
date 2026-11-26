@@ -71,13 +71,45 @@ def _resource(rel):
     return os.path.join(base, rel)
 
 
-def official_app_running():
+class _PROCESSENTRY32W(ctypes.Structure):
+    _fields_ = [('dwSize', ctypes.c_uint32), ('cntUsage', ctypes.c_uint32), ('th32ProcessID', ctypes.c_uint32),
+                ('th32DefaultHeapID', ctypes.c_size_t), ('th32ModuleID', ctypes.c_uint32), ('cntThreads', ctypes.c_uint32),
+                ('th32ParentProcessID', ctypes.c_uint32), ('pcPriClassBase', ctypes.c_long), ('dwFlags', ctypes.c_uint32),
+                ('szExeFile', ctypes.c_wchar * 260)]
+
+
+def process_running(name):
+    """True if a process with this exe name runs. Uses the Toolhelp snapshot in-process (no tasklist.exe child)."""
     try:
-        out = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq DeviceDriver.exe'], capture_output=True, text=True, errors='replace',
-                             creationflags=NO_WINDOW).stdout
-        return 'DeviceDriver.exe' in out
+        k32 = ctypes.WinDLL('kernel32', use_last_error=True)
+        k32.CreateToolhelp32Snapshot.restype = ctypes.c_void_p
+        k32.CreateToolhelp32Snapshot.argtypes = [ctypes.c_uint32, ctypes.c_uint32]
+        k32.Process32FirstW.argtypes = k32.Process32NextW.argtypes = [ctypes.c_void_p, ctypes.POINTER(_PROCESSENTRY32W)]
+        k32.CloseHandle.argtypes = [ctypes.c_void_p]
+        snap = k32.CreateToolhelp32Snapshot(0x2, 0)                       # TH32CS_SNAPPROCESS
+        if not snap or snap == ctypes.c_void_p(-1).value:
+            return False
+        try:
+            entry = _PROCESSENTRY32W()
+            entry.dwSize = ctypes.sizeof(entry)
+            ok = k32.Process32FirstW(snap, ctypes.byref(entry))
+            name = name.lower()
+            while ok:
+                if entry.szExeFile.lower() == name:
+                    return True
+                ok = k32.Process32NextW(snap, ctypes.byref(entry))
+            return False
+        finally:
+            k32.CloseHandle(snap)
     except Exception:
         return False
+
+
+def official_app_running():
+    return process_running('DeviceDriver.exe')
+
+
+OFFICIAL_POLL_MS = 20000          # the official app is rarely started; checking every 20 s is plenty
 
 
 class NavItem(tk.Frame):
@@ -195,6 +227,7 @@ class App(tk.Tk):
         self.pc_listener = pcactions.Listener(lambda n: self.post(self._pc_key, n))
         self.pc_listener.start()
         self.protocol('WM_DELETE_WINDOW', self._on_x)
+        self.protocol('WM_SAVE_YOURSELF', self._stop_polling)     # Tk's name for Windows' WM_QUERYENDSESSION (log off / shutdown)
         self.after(25, self._drain)
         self.after(200, self._tick_connect)
         self.after(500, self._tick_official)
@@ -411,11 +444,11 @@ class App(tk.Tk):
         threading.Thread(target=work, daemon=True).start()
 
     def _tick_official(self):
-        def check():
-            running = official_app_running()
-            self.post(self._banner, running)
-        threading.Thread(target=check, daemon=True).start()
-        self.after(3000, self._tick_official)
+        self._official_job = None
+        if getattr(self, '_closing', False):
+            return
+        self._banner(official_app_running())       # in-process snapshot, a few ms: no thread or child process needed
+        self._official_job = self.after(OFFICIAL_POLL_MS, self._tick_official)
 
     def _banner(self, show):
         if show and not self.banner.winfo_ismapped():
@@ -425,6 +458,7 @@ class App(tk.Tk):
 
     def _kill_official(self):
         subprocess.run(['taskkill', '/F', '/IM', 'DeviceDriver.exe'], capture_output=True, creationflags=NO_WINDOW)
+        self._banner(official_app_running())
         self.status_msg('Official app closed. Its saved profile is no longer applied.', 'ok')
 
     # ------------------------------------------------------------------ lighting (latest write wins)
@@ -624,7 +658,19 @@ class App(tk.Tk):
     def quit_app(self):
         self._close()
 
+    def _stop_polling(self):
+        """Stop the periodic official-app check so nothing runs while the window or Windows is shutting down."""
+        self._closing = True
+        job = getattr(self, '_official_job', None)
+        if job:
+            try:
+                self.after_cancel(job)
+            except Exception:
+                pass
+            self._official_job = None
+
     def _close(self):
+        self._stop_polling()
         if self.live_worker:
             self.live_worker.stop()
         self.tray.stop()
@@ -644,7 +690,8 @@ def selftest():
             out.append('%-10s ok  %s' % (name, fn() or ''))
         except Exception as e:
             out.append('%-10s FAIL %s: %s' % (name, type(e).__name__, e))
-    check('keyboard', lambda: ('wired' if ak980.find_path() else '2.4G dongle' if ak980.find_path('mi_03', ak980.DONGLE_PID) else (_ for _ in ()).throw(OSError('keyboard not found'))))
+    check('keyboard', lambda: ('wired' if ak980.find_path() else 'wired (firmware 769)' if ak980.find_path('mi_02', ak980.NEW_FIRMWARE_PID)
+                               else '2.4G dongle' if ak980.find_path('mi_03', ak980.DONGLE_PID) else (_ for _ in ()).throw(OSError('keyboard not found'))))
     check('pillow', lambda: __import__('PIL.Image', fromlist=['Image']).__name__)
     import effects
 
