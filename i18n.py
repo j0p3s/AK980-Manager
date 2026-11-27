@@ -111,6 +111,7 @@ def install():
     orig_set, orig_get = tk.StringVar.set, tk.StringVar.get
     tk.StringVar.set = lambda self, value: orig_set(self, tr(value))
     tk.StringVar.get = lambda self: untr(orig_get(self))
+    tk.StringVar.initialize = tk.StringVar.set     # StringVar(value='Once') goes through initialize, not set
     from tkinter import ttk
     cb_set, cb_get = ttk.Combobox.set, ttk.Combobox.get
     ttk.Combobox.set = lambda self, value: cb_set(self, tr(value))

@@ -83,7 +83,8 @@ class Budget:
     def refill(self, t):
         if self.updated and t > self.updated:
             self.tokens = min(float(self.burst), self.tokens + (t - self.updated) * self.per_day / 86400.0)
-        self.updated = t
+        if t > self.updated:                                       # clock moved back: keep the later mark so that span is not counted twice
+            self.updated = t
 
     def available(self, t):
         self.refill(t)

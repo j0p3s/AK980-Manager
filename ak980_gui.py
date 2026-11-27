@@ -302,6 +302,8 @@ class App(tk.Tk):
             self.pages[name] = cls(self.hosts[name].body, self)
             self.pages[name].pack(fill='both', expand=True)
         self.bind_all('<MouseWheel>', self._on_wheel)
+        for cls in ('TCombobox', 'TSpinbox'):                      # the wheel must not change a drop-down or number box the pointer passes over:
+            self.bind_class(cls, '<MouseWheel>', self._wheel_page)  # it scrolls the page instead, values change only by clicking or typing
         sb = tk.Frame(main, bg=C['side'])
         sb.pack(fill='x', side='bottom')
         self.dot = tk.Canvas(sb, width=14, height=14, bg=C['side'], highlightthickness=0)
@@ -321,6 +323,11 @@ class App(tk.Tk):
             cls = 'Listbox'
         if self.current and cls not in ('Listbox', 'Text', 'Treeview', 'TCombobox', 'Scale', 'TScale'):
             self.hosts[self.current].wheel(e.delta)
+
+    def _wheel_page(self, e):
+        if self.current:
+            self.hosts[self.current].wheel(e.delta)
+        return 'break'
 
     def show(self, name):
         if self.current and name != self.current:
@@ -403,7 +410,12 @@ class App(tk.Tk):
         threading.Thread(target=work, daemon=True).start()
 
     def on_disconnect(self, err):
-        self.kb = None
+        old, self.kb = self.kb, None
+        if hasattr(old, 'close'):                                  # the firmware-769/770 class keeps two handles and a reader thread open
+            try:
+                old.close()
+            except Exception:
+                pass
         self._draw_pill(False)
         self.status_msg('Keyboard error: %s' % err, 'err')
 
@@ -416,9 +428,7 @@ class App(tk.Tk):
                                                         ''), 'ok')
             except OSError as e:
                 self._draw_pill(False)
-                if 'new USB ID' in str(e):
-                    self.status_msg(str(e), 'err')
-                elif getattr(self, '_bt_seen', None):
+                if getattr(self, '_bt_seen', None):
                     self.status_msg('The keyboard is connected over Bluetooth (%s). This program cannot change settings over Bluetooth: '
                                     'plug in the USB cable or use the 2.4G dongle.' % self._bt_seen, 'err')
                 else:

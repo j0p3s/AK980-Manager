@@ -5,6 +5,7 @@ import threading
 import tkinter as tk
 
 import ak980
+import i18n
 import live
 import pages
 from pages import Page
@@ -69,7 +70,7 @@ class OverviewPage(Page):
                           if a.kb is None else ('The screen and real-time effects need the USB cable.' if getattr(a.kb, 'wireless', False) else 'Everything is available.'))
         st = a.light
         t['Lighting'].set(st.get('effect', 'Static') if st.get('mode', 'effect') == 'effect' else 'Per-key colours',
-                          'brightness %s, speed %s%s' % (st.get('bright', 3), st.get('speed', 3), ', rainbow colours' if st.get('colorful') else ''))
+                          'brightness %s, speed %s%s' % (st.get('bright', 3), st.get('speed', 3), ', ' + i18n.tr('rainbow colours') if st.get('colorful') else ''))
         km = pages.load_json(pages.KEYMAP_FILE, {'top': {}, 'fn': {}})
         top, fn = len(km.get('top', {})), len(km.get('fn', {}))
         t['Keys'].set('%d remapped' % (top + fn), '%d on the normal layer, %d on the Fn layer' % (top, fn))
@@ -77,7 +78,7 @@ class OverviewPage(Page):
         t['Macros'].set('%d macro%s' % (len(a.macros), '' if len(a.macros) == 1 else 's'), '%d of %d bytes of keyboard macro memory used' % (used, pages.MACRO_BUDGET))
         total, today = live.uploads()
         w = a.live_worker
-        t['Screen'].set('%d upload%s today' % (today, '' if today == 1 else 's'), '%d in total. Live screen: %s' % (total, (w.status if a.live_settings.get('enabled') else 'off') if w else 'off'))
+        t['Screen'].set('%d upload%s today' % (today, '' if today == 1 else 's'), '%d in total. Live screen: %s' % (total, i18n.tr((w.status if a.live_settings.get('enabled') else 'off') if w else 'off')))
         pos = w.pomo_position(w.clock()) if w else None
         if pos:
             mins = max(0, int((pos[3].timestamp() - w.clock()) // 60) + 1)
@@ -125,7 +126,7 @@ class ConnectionPage(Page):
         self.check()
 
     def check(self):
-        self.now.configure(text='Using now: %s' % connection_text(self.app.kb))
+        self.now.configure(text='Using now: %s' % i18n.tr(connection_text(self.app.kb)))
         for k in self.rows:
             self.rows[k].configure(text='checking...', fg=C['muted'])
 

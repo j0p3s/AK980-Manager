@@ -72,13 +72,20 @@ class Card(tk.Frame):
         self.body.pack(fill='both', expand=True, padx=16, pady=12)
 
 
+def fit_width(text, size, bold, pad, width=None):
+    """Width for a button or pill: wide enough for the text as it will be shown (translated, bold when it can be), never narrower than
+    `width`. Measuring the English text clipped longer translations ("dicionar aos passo")."""
+    import i18n
+    need = tkfont.Font(family=FONT, size=size, weight='bold' if bold else 'normal').measure(i18n.tr(text)) + pad
+    return max(width or 0, need)
+
+
 class Btn(tk.Canvas):
     """Rounded button. kind: primary | ghost | danger."""
 
     def __init__(self, parent, text, command=None, kind='ghost', width=None, height=34, size=10, **kw):
         self.kind, self.command, self.text, self.size = kind, command, text, size
-        f = tkfont.Font(family=FONT, size=size, weight='bold' if kind == 'primary' else 'normal')
-        w = width or f.measure(text) + 34
+        w = fit_width(text, size, kind == 'primary', 34, width)
         super().__init__(parent, width=w, height=height, bg=parent['bg'], highlightthickness=0, cursor='hand2', **kw)
         self.w, self.h, self.enabled, self.hov = w, height, True, False
         self.bind('<Enter>', lambda e: self._hover(True))
@@ -117,8 +124,7 @@ class Btn(tk.Canvas):
 
     def set_text(self, text):
         self.text = text
-        f = tkfont.Font(family=FONT, size=self.size, weight='bold' if self.kind == 'primary' else 'normal')
-        self.w = f.measure(text) + 34
+        self.w = fit_width(text, self.size, self.kind == 'primary', 34)
         self.configure(width=self.w)
         self._draw()
 
@@ -127,8 +133,7 @@ class Chip(tk.Canvas):
     """Selectable pill (used for effects, segmented controls, palettes of choices)."""
 
     def __init__(self, parent, text, command=None, width=None, height=32, size=10, selected=False, **kw):
-        f = tkfont.Font(family=FONT, size=size)
-        w = width or f.measure(text) + 28
+        w = fit_width(text, size, False, 28, width)
         super().__init__(parent, width=w, height=height, bg=parent['bg'], highlightthickness=0, cursor='hand2', **kw)
         self.text, self.command, self.w, self.h, self.size = text, command, w, height, size
         self.selected, self.hov = selected, False

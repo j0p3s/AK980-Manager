@@ -19,7 +19,7 @@ import layout
 import pcactions
 import theme
 from keyboard_view import DUAL, KeyboardView
-from theme import C, Btn, Card, Chip, Seg, Slider, Toggle, label, listbox
+from theme import C, Btn, Card, Chip, Seg, Slider, Toggle, label, listbox, fit_width
 
 DATA = os.path.join(os.environ.get('APPDATA', '.'), 'AK980Manager')
 KEYMAP_FILE = os.path.join(DATA, 'keymap.json')
@@ -377,7 +377,9 @@ class PerKeyPage(Page):
         self.cur_sw = tk.Canvas(row, width=44, height=30, bg=C['card'], highlightthickness=0)
         self.cur_sw.pack(side='left', padx=(0, 12))
         Palette(row, self.setcur).pack(side='left')
-        Btn(row, 'Fill all', self.fill, height=30, size=9).pack(side='left', padx=(20, 6))
+        row = tk.Frame(bar.body, bg=C['card'])                     # actions on their own row: with the palette they did not fit in longer languages
+        row.pack(fill='x', pady=(10, 0))
+        Btn(row, 'Fill all', self.fill, height=30, size=9).pack(side='left', padx=(0, 6))
         Btn(row, 'Rainbow', self.rainbow, height=30, size=9).pack(side='left', padx=(0, 6))
         Btn(row, 'Go crazy', self.go_crazy, height=30, size=9).pack(side='left', padx=(0, 6))
         Btn(row, 'Clear all', self.clear, height=30, size=9).pack(side='left', padx=(0, 6))
@@ -725,9 +727,12 @@ class KeysPage(Page):
         row.pack(fill='x')
         label(row, 'Make it', 10, False, C['muted'], C['card']).pack(side='left', padx=(0, 10))
         Seg(row, ('Key', 'Sequence', 'Media', 'Mouse', 'Macro', 'Special', 'PC action', 'Modifiers'), self.kind, self._kind_changed, width=80).pack(side='left')
+        row = tk.Frame(b, bg=C['card'])                            # the list on its own row: next to the eight choices it was squeezed out
+        row.pack(fill='x', pady=(10, 0))
         self.target = ttk.Combobox(row, state='readonly', width=24, height=18)
-        self.target.pack(side='left', padx=14)
-        self.target_hint = label(row, '', 10, False, C['muted'], C['card'])
+        self.target.pack(side='left', padx=(fit_width('Make it', 10, False, 10), 0))   # under the choices, past the 'Make it' label
+        self.target_row = row
+        self.target_hint = label(b, '', 10, False, C['muted'], C['card'], wraplength=900, justify='left')   # own line under the list
         self.macro_opts = tk.Frame(b, bg=C['card'])
         label(self.macro_opts, 'Play', 10, False, C['muted'], C['card']).pack(side='left', padx=(0, 10))
         self.play_mode = ttk.Combobox(self.macro_opts, values=PLAY_MODES, state='readonly', width=36)
@@ -756,7 +761,7 @@ class KeysPage(Page):
         self.pc_browse = Btn(self.pc_opts, 'Browse...', self._browse, height=28, size=9)
         self.pc_browse.pack(side='left', padx=8)
         label(self.pc_opts, 'Runs on the PC: Ajazz AK980 V2 Manager must be running (it can start with Windows).', 9, False, C['muted'],
-              C['card']).pack(side='left', padx=8)
+              C['card'], wraplength=300, justify='left').pack(side='left', padx=8)
         mods = tk.Frame(b, bg=C['card'])
         self.mods_frame = mods
         mods.pack(fill='x', pady=(10, 0))
@@ -812,7 +817,10 @@ class KeysPage(Page):
         self._preview()
         if k == 'Macro' and not vals:
             self.target_hint.configure(text='No macros yet - create one on the Macros page.')
-            self.target_hint.pack(side='left')
+            self.target_hint.pack(anchor='w', pady=(6, 0), after=self.target_row)
+        elif k == 'PC action' and getattr(self.app.kb, 'v2', False):     # tested 2026-11-27 on 770: no report on any interface
+            self.target_hint.configure(text='On firmware 769/770 the keyboard does not report this key over the USB cable: PC actions work over the 2.4G dongle only.')
+            self.target_hint.pack(anchor='w', pady=(6, 0), after=self.target_row)
         else:
             self.target_hint.pack_forget()
 

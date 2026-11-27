@@ -737,14 +737,23 @@ class KeyboardV2:
         self.lock = threading.RLock()
         self._acks = queue.Queue()
         self._hw = self._open(0x40000000)
-        hr = self._open(0x80000000)
-        threading.Thread(target=self._read_loop, args=(hr,), daemon=True).start()
+        self._hr = self._open(0x80000000)
+        threading.Thread(target=self._read_loop, args=(self._hr,), daemon=True).start()
 
     def _open(self, access):
         h = k32.CreateFileW(self.path, access, 3, None, 3, 0, None)
         if h in (None, w.HANDLE(-1).value):
             raise OSError('cannot open device (error %d)' % ctypes.get_last_error())
         return h
+
+    def close(self):
+        """Closes both handles; the reader thread ends when its ReadFile fails."""
+        for name in ('_hw', '_hr'):
+            h = getattr(self, name, None)
+            if h:
+                k32.CancelIoEx(h, None)                            # wakes the reader blocked in ReadFile
+                k32.CloseHandle(h)
+                setattr(self, name, None)
 
     def _read_loop(self, h):
         while True:
@@ -789,7 +798,7 @@ class KeyboardV2:
                         except queue.Empty:
                             continue
                         debuglog.log('V2 RX: %s' % debuglog.hexs(r))
-                        if r[:2] == bytes([0x55, cmd]):
+                        if r[:2] == bytes([0x55, cmd]) and r[3:5] == frame[3:5]:     # same chunk: a late answer to a retried chunk is not the next one
                             got = r
                     if got is not None:
                         break
