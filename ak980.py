@@ -17,7 +17,7 @@ import debuglog
 from ctypes import wintypes as w
 
 VID, PID, IFACE = 0x0C45, 0x8009, 'mi_03'
-NEW_FIRMWARE_PID = 0x8039           # what the keyboard reports over USB after the 'LED v2 Firmware 769' update: the cable protocol changed (see HANDOFF)
+NEW_FIRMWARE_PID = 0x8039           # what the keyboard reports over USB after the 'LED v2 Firmware 769' or '770' update: the cable protocol changed (see HANDOFF)
 WIRED_PIDS = (0x8009,)
 
 EFFECTS = [  # id = index + 1 (all 19 verified on the cable keyboard 2026-11-23 with tools/verify_effects.py)
@@ -715,7 +715,7 @@ class DongleKeyboard:
 
 
 class KeyboardV2:
-    """The keyboard on USB with the 'LED v2 Firmware 769' (USB ID 0C45:8039). Protocol read from AJAZZ's own web driver (ajazz.driveall.cn) and the
+    """The keyboard on USB with the 'LED v2 Firmware 769' or '770' (USB ID 0C45:8039). Protocol read from AJAZZ's own web driver (ajazz.driveall.cn) and the
     firmware, verified by reading the tables back from the hardware (see research/fw/NOTES_769.md):
     * 64-byte output reports on the vendor interface MI_02 (usage page FF68), 64-byte input reports for the answers.
     * Frame: `AA <cmd> <len> <addrLo> <addrHi> 00 <last-packet flag> 00 <data at offset 8...>` (56 data bytes per frame); the answer starts with 55.
@@ -733,7 +733,7 @@ class KeyboardV2:
     def __init__(self):
         self.path = find_path('mi_02', NEW_FIRMWARE_PID)
         if not self.path:
-            raise OSError('AK980 (firmware 769) not found (plug it in by USB cable)')
+            raise OSError('AK980 (firmware 769/770) not found (plug it in by USB cable)')
         self.lock = threading.RLock()
         self._acks = queue.Queue()
         self._hw = self._open(0x40000000)
@@ -880,7 +880,7 @@ class KeyboardV2:
         return True
 
     def _unsupported(self, *a, **k):
-        raise OSError('This is not available yet on keyboard firmware 769 over the cable. Bluetooth and the 2.4G dongle are not affected.')
+        raise OSError('This is not available yet on keyboard firmware 769/770 over the cable. Bluetooth and the 2.4G dongle are not affected.')
 
     # --- macros ----------------------------------------------------------------------------------
     @staticmethod

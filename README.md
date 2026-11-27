@@ -1,7 +1,7 @@
 # Ajazz AK980 V2 Manager
 
 An English, open-source replacement for the Chinese-only software of the **AJAZZ AK980 (V2) PRO** keyboard
-(USB `0C45:8009`, and the newer **"LED v2 Firmware 769"** units, USB `0C45:8039`, over the cable). Written by reverse engineering the official app's USB/HID traffic — see [docs/PROTOCOL.md](docs/PROTOCOL.md).
+(USB `0C45:8009`, and the newer **"LED v2 Firmware 769"** and **"770"** units, USB `0C45:8039`, over the cable). Written by reverse engineering the official app's USB/HID traffic — see [docs/PROTOCOL.md](docs/PROTOCOL.md).
 Windows, Python 3.10+ (Tkinter), Pillow. Licensed under the **GNU GPL v3 or later**. Not affiliated with AJAZZ.
 
 > **Use at your own risk.** This talks to your keyboard directly. It only sends the lighting, key map, macro, screen and
@@ -66,7 +66,7 @@ Use as a library: `import ak980; kb = ak980.Keyboard(); kb.set_lighting('Spectru
 * Over the 2.4G dongle the screen editor, key glow and Bass pulse are not available (the official app does not offer them there either); Bluetooth is not supported.
 * Macros: text is typed the way your Windows layout types it; recorded macros replay the exact keys and clicks (mouse movement is not recorded). The keyboard holds about 2700 bytes of macros (8 bytes per step); the page shows how much is used. PC actions work while the manager is running.
 * Real-time lighting over the cable (key glow, bass pulse) is implemented from captures; Music Rhythm "Bars" over 2.4G uses the keyboard's own equaliser.
-* Firmware 769 (cable only, USB `0C45:8039`): everything above works, tested on hardware, with these differences: the keyboard cannot report its colours back, and the screen shows a clock only through a Live screen clock card (the firmware's own clock page returns only after a full reset, which is what *Restore factory screen* does). Bluetooth and the 2.4G dongle on that firmware are not covered.
+* Firmware 769 and 770 (cable only, USB `0C45:8039`): everything above works, tested on hardware on 769 (770 only changes the screen language and text positions, same protocol; not yet tested), with these differences: the keyboard cannot report its colours back, and the screen shows a clock only through a Live screen clock card (the firmware's own clock page returns only after a full reset, which is what *Restore factory screen* does). Bluetooth and the 2.4G dongle on that firmware are not covered.
 * Profiles are stored on the PC (Profiles page), not in the keyboard.
 * Not implemented: firmware update, and a general factory reset (only *Restore factory screen* on the Screen page).
 * Writes take time: a per-key / macro / keymap update needs a few seconds; a screen upload with many frames can take minutes.
