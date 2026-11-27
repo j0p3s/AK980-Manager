@@ -253,9 +253,8 @@ class LightingPage(Page):
             ch = Chip(grid, name, lambda n=name: self.choose(n), width=112, selected=(name == st['effect']))
             ch.grid(row=i // 4, column=i % 4, padx=4, pady=4)
             self.chips[name] = ch
-        right = tk.Frame(body, bg=C['bg'], width=400)
+        right = tk.Frame(body, bg=C['bg'])                        # sized by its cards: a fixed size hid 'Reverse direction'
         right.pack(side='left', fill='y')
-        right.pack_propagate(False)
         col = Card(right, 'Colour')
         col.pack(fill='x')
         self.swatch = tk.Canvas(col.body, width=360, height=44, bg=C['card'], highlightthickness=0)
@@ -1265,7 +1264,7 @@ class MacrosPage(Page):
         body.pack(fill='both', expand=True)
         left = Card(body, 'Your macros')
         left.pack(side='left', fill='y', padx=(0, 12))
-        self.lb = listbox(left.body, 11, width=32)
+        self.lb = listbox(left.body, 11, width=24)            # narrower: the page was wider than the window (squeezed the sidebar)
         self.lb.pack(fill='both', expand=True)
         self.lb.bind('<<ListboxSelect>>', self.pick)
         r1 = tk.Frame(left.body, bg=C['card'])
@@ -1297,7 +1296,7 @@ class MacrosPage(Page):
         trow = tk.Frame(top.body, bg=C['card'])
         trow.pack(fill='x', pady=(12, 0))
         label(trow, 'Type text', 10, False, C['muted'], C['card']).pack(side='left')
-        self.text = ttk.Entry(trow, width=34)
+        self.text = ttk.Entry(trow, width=20)
         self.text.pack(side='left', padx=10)
         self.text.bind('<Return>', lambda e: self.add_text())          # Enter adds the typed text to the steps
         self.name.bind('<Return>', lambda e: self.text.focus_set())
@@ -1453,6 +1452,9 @@ class MacrosPage(Page):
             self.after(300, self._rec_tick)
 
     # ---- the list of macros
+    def on_show(self):
+        self._refresh()                                             # the meter depends on the keyboard connected now (769/770 has other room)
+
     def _refresh(self):
         self.lb.delete(0, 'end')
         for i, m in enumerate(self.app.macros):
