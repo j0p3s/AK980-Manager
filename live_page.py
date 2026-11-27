@@ -61,7 +61,7 @@ class LivePage(Page):
         self.ics.bind('<FocusOut>', lambda e: self._sources())
         Btn(r2, 'Browse...', self._browse, 'ghost', height=28, width=90).pack(side='left')
         label(cards.body, 'Use an .ics file or a calendar link (Google Calendar: Settings > your calendar > "Secret address in iCal format"). '
-              'Repeating events are not expanded.', 9, False, C['muted'], C['card'], wraplength=900, justify='left').pack(anchor='w', pady=(0, 8))
+              'Repeating meetings (daily, weekly, monthly, yearly) are included.', 9, False, C['muted'], C['card'], wraplength=900, justify='left').pack(anchor='w', pady=(0, 8))
         r3 = tk.Frame(cards.body, bg=C['card'])
         r3.pack(fill='x')
         Toggle(r3, 'Clock and date (refreshed about every 30 minutes)', self.v_clock, self._sources).pack(side='left')

@@ -535,7 +535,8 @@ class App(tk.Tk):
 
         def work():
             info = bootstrap.release_info('v' + VERSION)
-            text = (info[1].strip() if info and info[1].strip() else 'The release notes could not be loaded (offline?).')[:1800]
+            notes = bootstrap.notes_for_language(info[1], i18n.current) if info else ''       # the section in the chosen language
+            text = (notes if notes else i18n.tr('The release notes could not be loaded (offline?).'))[:1800]
             self.post(lambda: messagebox.showinfo("What's new in %s" % VERSION, text))
         threading.Thread(target=work, daemon=True).start()
 

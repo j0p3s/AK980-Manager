@@ -15,6 +15,7 @@ import io
 import json
 import os
 import py_compile
+import re
 import shutil
 import subprocess
 import sys
@@ -37,7 +38,7 @@ PACKAGES = {'pillow': 'PIL', 'numpy': 'numpy', 'soundcard': 'soundcard'}
 PIP_UPGRADE_EVERY = 7 * 24 * 3600
 SELF_UPDATE_EVERY = 6 * 3600
 # only these are ever replaced by a self-update; user settings live in %APPDATA% and are never touched
-UPDATE_EXT = ('.py', '.pyw', '.md', '.txt', '.bat', '.ps1', '.ico')
+UPDATE_EXT = ('.py', '.pyw', '.md', '.txt', '.bat', '.ps1', '.ico', '.json')   # .json: web_keylist.json (firmware 769/770 key table)
 UPDATE_DIRS = ('', 'docs', 'tools', 'assets')
 NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
 
@@ -135,6 +136,22 @@ def release_info(tag=None):
         return None
 
 
+def notes_for_language(body, language):
+    """The part of release notes in `language`. Notes may carry one section per language, each started by an HTML comment line such as
+    <!-- lang: Português --> (invisible on GitHub); the text before the first marker is English. Without markers the whole text comes back.
+    Markdown bold markers are dropped, as the notes are shown in a plain message box."""
+    parts, cur = {'English': []}, 'English'
+    for line in (body or '').replace('\r\n', '\n').split('\n'):
+        m = re.match(r'\s*<!--\s*lang:\s*(.+?)\s*-->\s*$', line)
+        if m:
+            cur = m.group(1)
+            parts.setdefault(cur, [])
+            continue
+        parts.setdefault(cur, []).append(line)
+    text = '\n'.join(parts.get(language) or parts['English']).strip() or (body or '').strip()
+    return text.replace('**', '')
+
+
 def is_newer(tag, version):
     return _vtuple(tag) > _vtuple(version)
 
@@ -193,6 +210,9 @@ def self_update(progress=None, force=False):
                     files[rel] = blob
         if 'ak980.py' not in files or 'ak980_gui.py' not in files:
             raise ValueError('archive does not look like AK980 Manager')
+        for rel, blob in files.items():                    # and every data file must be valid JSON
+            if rel.endswith('.json'):
+                json.loads(blob.decode('utf-8'))
         # every Python file must at least compile before anything is replaced
         for rel, blob in files.items():
             if rel.endswith(('.py', '.pyw')):

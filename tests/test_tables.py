@@ -302,6 +302,18 @@ class TestI18n(unittest.TestCase):
 
 
 
+class ReleaseNotes(unittest.TestCase):
+    def test_notes_in_the_chosen_language(self):
+        import bootstrap
+        nl = chr(10)
+        body = nl.join(['Fixes.', '- **Lighting**: ok', '<!-- lang: Português -->', 'Correções.', '- **Iluminação**: ok',
+                        '<!-- lang: Français -->', 'Corrections.'])
+        self.assertEqual(bootstrap.notes_for_language(body, 'Português'), nl.join(['Correções.', '- Iluminação: ok']))
+        self.assertEqual(bootstrap.notes_for_language(body, 'English'), nl.join(['Fixes.', '- Lighting: ok']))
+        self.assertEqual(bootstrap.notes_for_language(body, 'Türkçe'), nl.join(['Fixes.', '- Lighting: ok']))   # no Turkish part: English
+        self.assertEqual(bootstrap.notes_for_language('Plain notes', 'Português'), 'Plain notes')
+
+
 class TestKeyboardV2(unittest.TestCase):
     """The firmware-769 cable protocol, with the transport replaced by a fake keyboard."""
 

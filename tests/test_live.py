@@ -160,6 +160,19 @@ class CalendarTests(unittest.TestCase):
         os.unlink(f.name)
         self.assertEqual(ups.count('up'), 1)
 
+    def test_repeating_events(self):
+        D = datetime.datetime
+        now = D(2026, 11, 26, 9, 0)                                       # a Thursday
+        ev = live.parse_ics('BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:standup\nDTSTART:20260105T093000\nRRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR\nSUMMARY:Standup\nEXDATE:20261127T093000\nEND:VEVENT\nBEGIN:VEVENT\nUID:standup\nRECURRENCE-ID:20261125T093000\nDTSTART:20261125T113000\nSUMMARY:Standup (moved)\nEND:VEVENT\nEND:VCALENDAR\n', now=now)
+        # Wed 25 moved to 11:30, Fri 27 excluded, Mon 30 is past the two-day window
+        self.assertEqual(ev, [(D(2026, 11, 25, 11, 30), 'Standup (moved)')])
+        ev = live.parse_ics('BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:standup\nDTSTART:20260105T093000\nRRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR\nSUMMARY:Standup\nEXDATE:20261127T093000\nEND:VEVENT\nBEGIN:VEVENT\nUID:standup\nRECURRENCE-ID:20261125T093000\nDTSTART:20261125T113000\nSUMMARY:Standup (moved)\nEND:VEVENT\nEND:VCALENDAR\n', now=D(2026, 11, 23, 9, 0))
+        self.assertEqual([e[0] for e in ev], [D(2026, 11, 23, 9, 30), D(2026, 11, 25, 11, 30)])
+        self.assertEqual([e[0].day for e in live.parse_ics('BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:c\nDTSTART:20261120T080000\nRRULE:FREQ=DAILY;COUNT=7\nSUMMARY:Course\nEND:VEVENT\nEND:VCALENDAR\n', now=D(2026, 11, 26, 7, 0))], [25, 26])   # COUNT=7: 20..26
+        self.assertEqual(live.parse_ics('BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:u\nDTSTART:20261101T080000\nRRULE:FREQ=DAILY;INTERVAL=2;UNTIL=20261126\nSUMMARY:Old\nEND:VEVENT\nEND:VCALENDAR\n', now=D(2026, 11, 28, 7, 0)), [])                          # past its UNTIL
+        self.assertEqual([e[0] for e in live.parse_ics('BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:m\nDTSTART:20260113T140000\nRRULE:FREQ=MONTHLY;BYDAY=2TU\nSUMMARY:Board\nEND:VEVENT\nEND:VCALENDAR\n', now=D(2026, 12, 7, 12, 0))], [D(2026, 12, 8, 14, 0)])   # 2nd Tuesday
+        self.assertEqual(len(live.parse_ics('BEGIN:VEVENT\nUID:c\nDTSTART:20261120T080000\nRRULE:FREQ=DAILY;COUNT=7\nSUMMARY:Course\nEND:VEVENT\n')), 1)                     # without now: the first date only
+
     def test_webcal_links_are_fetched_over_https(self):
         seen = []
         orig = live.urllib.request.urlopen

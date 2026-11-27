@@ -270,13 +270,95 @@ def _ics_text(value):
     return re.sub(r'\\(.)', lambda m: ' ' if m.group(1) in 'nN' else m.group(1), value).strip()
 
 
-def parse_ics(text):
-    """[(start, summary)] of the events in an iCalendar text. Repeating events (RRULE) are not expanded; only their first date counts.
-    Cancelled events are left out."""
+_WEEKDAYS = {'MO': 0, 'TU': 1, 'WE': 2, 'TH': 3, 'FR': 4, 'SA': 5, 'SU': 6}
+
+
+def _add_months(d, months):
+    """The same day `months` later, or None when that month has no such day (31 April)."""
+    m = d.month - 1 + months
+    y, m = d.year + m // 12, m % 12 + 1
+    try:
+        return d.replace(year=y, month=m)
+    except ValueError:
+        return None
+
+
+def _nth_weekday(year, month, n, wd, tod):
+    """The n-th (1..5, or -1 = last) weekday `wd` of a month at time of day `tod`, or None."""
+    first = datetime.datetime(year, month, 1, tod.hour, tod.minute, tod.second)
+    if n > 0:
+        d = first + datetime.timedelta(days=(wd - first.weekday()) % 7 + 7 * (n - 1))
+    else:
+        last = _add_months(first, 1) - datetime.timedelta(days=1)
+        d = last - datetime.timedelta(days=(last.weekday() - wd) % 7 + 7 * (-n - 1))
+    return d if d.month == month else None
+
+
+def _occurrences(start, rule, lo, hi):
+    """Start times of a repeating event (RRULE: FREQ DAILY / WEEKLY / MONTHLY / YEARLY, INTERVAL, BYDAY, UNTIL, COUNT) from `start`,
+    the ones between lo and hi. COUNT counts from the first occurrence, so the series is walked from its start."""
+    p = {}
+    for part in rule.split(';'):
+        k, _, v = part.partition('=')
+        p[k.strip().upper()] = v.strip()
+    freq = p.get('FREQ', '').upper()
+    try:
+        interval = max(1, int(p.get('INTERVAL') or 1))
+        count = int(p['COUNT']) if p.get('COUNT') else None
+    except ValueError:
+        return []
+    until = _ics_time(p['UNTIL'], '') if p.get('UNTIL') else None
+    if until is not None and len(p['UNTIL']) == 8:
+        until += datetime.timedelta(days=1, seconds=-1)               # a date: the whole day counts
+    byday = []
+    for d in filter(None, p.get('BYDAY', '').upper().split(',')):
+        m = re.fullmatch(r'([+-]?\d{1,2})?(MO|TU|WE|TH|FR|SA|SU)', d)
+        if m:
+            byday.append((int(m.group(1)) if m.group(1) else 0, _WEEKDAYS[m.group(2)]))
+    out, n = [], 0
+
+    def emit(occ):
+        nonlocal n
+        if occ < start or (until is not None and occ > until) or (count is not None and n >= count):
+            return False
+        n += 1
+        if lo <= occ <= hi:
+            out.append(occ)
+        return True
+    for k in range(20000):                                           # a daily meeting since years ago is a few thousand steps
+        if freq == 'DAILY':
+            batch = [start + datetime.timedelta(days=k * interval)]
+        elif freq == 'WEEKLY':
+            week = start - datetime.timedelta(days=start.weekday()) + datetime.timedelta(weeks=k * interval)
+            batch = sorted(week + datetime.timedelta(days=wd) for _, wd in byday) if byday else [start + datetime.timedelta(weeks=k * interval)]
+        elif freq == 'MONTHLY':
+            base = _add_months(start.replace(day=1), k * interval)
+            if byday:
+                batch = sorted(filter(None, (_nth_weekday(base.year, base.month, nth or 1, wd, start) for nth, wd in byday)))
+            else:
+                batch = [x for x in [_add_months(start, k * interval)] if x]
+        elif freq == 'YEARLY':
+            batch = [x for x in [_add_months(start, 12 * k * interval)] if x]
+        else:
+            return []
+        if batch and batch[0] > hi:
+            break
+        for occ in batch:
+            emit(occ)
+        if (until is not None and batch and batch[-1] > until) or (count is not None and n >= count):
+            break
+    return out
+
+
+def parse_ics(text, now=None):
+    """[(start, summary)] of the events in an iCalendar text. Without `now` a repeating event counts with its first date only; with `now`
+    its occurrences from a day before to two days after `now` are listed (daily, weekly, monthly, yearly; EXDATE skipped; a moved or
+    cancelled single occurrence, RECURRENCE-ID, replaces the regular one). Cancelled events are left out."""
     text = re.sub(r'\r?\n[ \t]', '', text)                   # unfold continued lines
-    out = []
+    events = []
     for block in re.findall(r'BEGIN:VEVENT(.*?)END:VEVENT', text, re.S):
-        start, summary, cancelled, depth = None, '', False, 0
+        e = {'start': None, 'summary': '', 'cancelled': False, 'uid': '', 'rrule': '', 'exdates': set(), 'recid': None}
+        depth = 0
         for line in block.splitlines():
             name, value = _ics_split(line)
             key = name.split(';')[0].strip().upper()
@@ -287,13 +369,32 @@ def parse_ics(text):
             elif depth:
                 continue
             elif key == 'DTSTART':
-                start = _ics_time(value, name)
+                e['start'] = _ics_time(value, name)
             elif key == 'SUMMARY':
-                summary = _ics_text(value)
+                e['summary'] = _ics_text(value)
             elif key == 'STATUS' and value.strip().upper() == 'CANCELLED':
-                cancelled = True
-        if start and not cancelled:
-            out.append((start, summary or '(no title)'))
+                e['cancelled'] = True
+            elif key == 'UID':
+                e['uid'] = value.strip()
+            elif key == 'RRULE':
+                e['rrule'] = value.strip()
+            elif key == 'EXDATE':
+                e['exdates'].update(x for x in (_ics_time(v, name) for v in value.split(',')) if x)
+            elif key == 'RECURRENCE-ID':
+                e['recid'] = _ics_time(value, name)
+        events.append(e)
+    moved = {(e['uid'], e['recid']) for e in events if e['recid'] is not None}
+    out = []
+    for e in events:
+        if not e['start'] or e['cancelled']:
+            continue
+        if e['rrule'] and now is not None and e['recid'] is None:
+            lo, hi = now - datetime.timedelta(days=1), now + datetime.timedelta(days=2)
+            for occ in _occurrences(e['start'], e['rrule'], lo, hi):
+                if occ not in e['exdates'] and (e['uid'], occ) not in moved:
+                    out.append((occ, e['summary'] or '(no title)'))
+        else:
+            out.append((e['start'], e['summary'] or '(no title)'))
     return sorted(out)
 
 
@@ -480,7 +581,7 @@ class Worker(threading.Thread):
                     number = sum(1 for k, _ in plan[:idx + 1] if k == 'focus')
                     self.offer('focus:%d' % idx, pomodoro_card(pos[1], number, focus_total, pos[2], pos[3]))
         if src.get('calendar') and self.s.get('ics') and due('calendar', 300):      # every 5 minutes; a meeting is shown once
-            ev = next_event(parse_ics(load_ics(self.s['ics'])), dt)
+            ev = next_event(parse_ics(load_ics(self.s['ics']), now=dt), dt)
             key = 'calendar:%s|%s' % ev if ev else None
             if ev and key not in self.fired:
                 self.fired.add(key)
