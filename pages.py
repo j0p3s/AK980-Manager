@@ -4,6 +4,7 @@
 import colorsys
 import html
 import json
+import appsettings
 import os
 import re
 import xml.etree.ElementTree as ET
@@ -72,9 +73,7 @@ def load_json(path, default):
 
 def save_json(path, obj):
     try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(obj, f)
+        appsettings.write_json(path, obj)
     except OSError:
         pass
 
@@ -1198,9 +1197,17 @@ MACRO_SLOTS = 100               # directory slots in the keyboard's macro table
 MACRO_BUDGET = 0xA8C            # bytes of macro data the stock driver allows: (events + macros) * 8 (found in Keymotion's protocol notes)
 
 
-def macro_bytes(macros):
-    """Bytes the given macros use against MACRO_BUDGET."""
-    return (sum(len(events_of(m)) for m in macros) + len(macros)) * 8
+def macro_bytes(macros, per=8):
+    """Bytes the given macros use: `per` bytes for each step and for each macro's header (8 on the old firmware, 4 on 769/770)."""
+    return (sum(len(events_of(m)) for m in macros) + len(macros)) * per
+
+
+def macro_layout(kb):
+    """(bytes per step, bytes of room) for the connected keyboard: firmware 769/770 stores 4-byte steps in 2672 bytes (measured on the
+    770), the others 8-byte steps in MACRO_BUDGET."""
+    if getattr(kb, 'v2', False):
+        return 4, ak980.KeyboardV2.MACRO_AREA - 400
+    return 8, MACRO_BUDGET
 
 
 def layout_key_names():
@@ -1395,7 +1402,8 @@ class MacrosPage(Page):
         if self.recorder is None:
             try:
                 others = [m for i, m in enumerate(self.app.macros) if i != self.cur]
-                room = (MACRO_BUDGET - macro_bytes(others) - 8) // 8 - len(self.events) - 1       # events still free, this macro's header counted
+                per, budget = macro_layout(self.app.kb)
+                room = (budget - macro_bytes(others, per) - per) // per - len(self.events) - 1       # events still free, this macro's header counted
                 self.recorder = recorder.Recorder(max(0, min(recorder.MAX_EVENTS, room)))
                 self.recorder.start()
             except Exception as e:
@@ -1438,10 +1446,11 @@ class MacrosPage(Page):
             self.lb.insert('end', '  %d   %s   (%d events)' % (i, m['name'], len(ev)))
         if self.cur is not None and self.cur < len(self.app.macros):
             self.lb.selection_set(self.cur)
-        used = macro_bytes(self.app.macros)
+        per, budget = macro_layout(self.app.kb)
+        used = macro_bytes(self.app.macros, per)
         self.mem.configure(text='Keyboard macro memory: %d of %d bytes used (%d%%), %d of %d macros.' % (
-            used, MACRO_BUDGET, 100 * used // MACRO_BUDGET, len(self.app.macros), MACRO_SLOTS),
-            fg=C['bad'] if used > MACRO_BUDGET else C['muted'])
+            used, budget, 100 * used // budget, len(self.app.macros), MACRO_SLOTS),
+            fg=C['bad'] if used > budget else C['muted'])
 
     def new(self):
         self.cur, self.events = None, []
@@ -1469,9 +1478,10 @@ class MacrosPage(Page):
         m = {'name': n, 'delay': self._delay(), 'events': [list(e) for e in self.events]}
         m['text'] = 'Steps: ' + events_summary(self.events)
         others = [x for i, x in enumerate(self.app.macros) if x['name'] != n and i != self.cur]
-        if macro_bytes(others + [m]) > MACRO_BUDGET:
-            messagebox.showerror('Macro', 'The keyboard has room for %d bytes of macros (8 per step and per macro) and this would need %d.\n\n'
-                                 'Shorten this macro or delete another one.' % (MACRO_BUDGET, macro_bytes(others + [m])))
+        per, budget = macro_layout(self.app.kb)
+        if macro_bytes(others + [m], per) > budget:
+            messagebox.showerror('Macro', 'The keyboard has room for %d bytes of macros (%d per step and per macro) and this would need %d.\n\n'
+                                 'Shorten this macro or delete another one.' % (budget, per, macro_bytes(others + [m], per)))
             return False
         same = [i for i, x in enumerate(self.app.macros) if x['name'] == n]
         if self.cur is not None and self.cur < len(self.app.macros) and (not same or self.cur in same):
@@ -1557,7 +1567,9 @@ class SystemPage(Page):
         g = card.body
         self.sleep = ttk.Combobox(g, values=list(ak980.Keyboard.SLEEP), state='readonly', width=16)
         self.sleep.set('5 min')
-        self.level = ttk.Combobox(g, values=['2', '3'], state='readonly', width=16)
+        self.level = ttk.Combobox(g, values=['2', '3'], state='readonly', width=16,
+                                  postcommand=lambda: self.level.configure(values=['1', '2', '3'] if getattr(self.app.kb, 'v2', False) else ['2', '3']))
+        # level 1 is offered on firmware 769/770 only (verified there); the list is rebuilt each time it opens, as the keyboard can change
         self.level.set('2')
         self.fn = ttk.Combobox(g, values=['Momentary (hold Fn)', 'Toggle (press Fn to switch layer)'], state='readonly', width=34)
         self.fn.set('Momentary (hold Fn)')
@@ -1822,7 +1834,7 @@ class SystemPage(Page):
             return
         sl, lv = ak980.Keyboard.SLEEP[self.sleep.get()], int(self.level.get())
         tg = self.fn.get().startswith('Toggle')
-        self.app.run(lambda kb: kb.set_system(sl, lv, tg), 'System settings applied')
+        self.app.run(lambda kb: kb.set_system(sl, lv if lv > 1 or getattr(kb, 'v2', False) else 2, tg), 'System settings applied')   # 1: 769/770 only
 
     def check(self):
         import threading

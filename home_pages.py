@@ -74,8 +74,9 @@ class OverviewPage(Page):
         km = pages.load_json(pages.KEYMAP_FILE, {'top': {}, 'fn': {}})
         top, fn = len(km.get('top', {})), len(km.get('fn', {}))
         t['Keys'].set('%d remapped' % (top + fn), '%d on the normal layer, %d on the Fn layer' % (top, fn))
-        used = pages.macro_bytes(a.macros)
-        t['Macros'].set('%d macro%s' % (len(a.macros), '' if len(a.macros) == 1 else 's'), '%d of %d bytes of keyboard macro memory used' % (used, pages.MACRO_BUDGET))
+        per, budget = pages.macro_layout(a.kb)
+        used = pages.macro_bytes(a.macros, per)
+        t['Macros'].set('%d macro%s' % (len(a.macros), '' if len(a.macros) == 1 else 's'), '%d of %d bytes of keyboard macro memory used' % (used, budget))
         total, today = live.uploads()
         w = a.live_worker
         t['Screen'].set('%d upload%s today' % (today, '' if today == 1 else 's'), '%d in total. Live screen: %s' % (total, i18n.tr((w.status if a.live_settings.get('enabled') else 'off') if w else 'off')))

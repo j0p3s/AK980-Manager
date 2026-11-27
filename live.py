@@ -8,6 +8,7 @@ Uploads need the USB cable (the 2.4G dongle has no screen upload)."""
 import datetime
 import hashlib
 import json
+import appsettings
 import os
 import re
 import subprocess
@@ -45,9 +46,7 @@ def count_upload(path=COUNTER, when=None):
     days[day] = int(days.get(day, 0)) + 1
     d['days'] = dict(sorted(days.items())[-14:])               # keep two weeks
     try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(d, f)
+        appsettings.write_json(path, d)
     except OSError:
         pass
     return d['total'], days[day]
@@ -359,9 +358,7 @@ def load_settings(path=STATE):
 
 def save_settings(s, path=STATE):
     try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(s, f, indent=1)
+        appsettings.write_json(path, s, indent=1)
     except OSError:
         pass
 

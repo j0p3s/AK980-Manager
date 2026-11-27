@@ -322,6 +322,19 @@ class TestKeyboardV2(unittest.TestCase):
             with self.assertRaises(ValueError):
                 kb._frame(bad, 1, 0)
 
+    def test_set_macros_starts_a_write_on_each_flash_page(self):
+        """The firmware erases a 1 KB page only for a frame that starts on it: macro data must be cut at 1024 and 2048."""
+        kb = ak980.KeyboardV2.__new__(ak980.KeyboardV2)
+        calls = []
+        kb._exchange = lambda cmd, size, data=None, timeout=0.5, addr_start=0, last_flag=True: calls.append((cmd, size, addr_start, last_flag, data))
+        ev = [(4, i % 2 == 0, 20) for i in range(600)]                    # 4 + 2400 bytes of data: ends at 2804
+        kb.set_macros([ev])
+        self.assertEqual([(c[1], c[2], c[3]) for c in calls], [(400, 0, False), (624, 400, False), (1024, 1024, False), (756, 2048, True)])
+        index, data = ak980.KeyboardV2.macro_blocks([ev])
+        self.assertEqual(b''.join(c[4] for c in calls[1:]), data)
+        with self.assertRaises(ValueError):
+            kb.set_macros([[(4, True, 20)] * 668])                         # 4 + 2672 bytes: one header too many
+
     def test_reset_frame(self):
         f = ak980.KeyboardV2.reset_frame()
         self.assertEqual((len(f), f[:3], f[3:]), (64, bytes([0xAA, 0x0F, 0xFF]), bytes(61)))

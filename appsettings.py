@@ -8,6 +8,18 @@ DEFAULTS = {'close_to_tray': True, 'last_version': '', 'calibration': [1.0, 1.0,
             'updates': 'Update automatically', 'debug_log': False}
 
 
+def write_json(path, obj, indent=None):
+    """Writes a JSON file so that a crash or shutdown in the middle never leaves it cut short: a temporary file first, then one rename.
+    Raises OSError (and TypeError for data JSON cannot hold) like open()/json.dump would; the old file is kept in both cases."""
+    os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(obj, f, indent=indent)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
 def load(path=None):
     try:
         with open(path or PATH, encoding='utf-8') as f:
@@ -28,8 +40,6 @@ def set(key, value, path=None):       # noqa: A001 - mirrors dict-like usage
     data = load(path)
     data[key] = value
     try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=1)
+        write_json(path, data, indent=1)
     except OSError:
         pass

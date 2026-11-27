@@ -600,9 +600,8 @@ class DongleKeyboard:
             for i, e in sorted(todo.items()):
                 self._send(bytes([cmd, 0x04, i]) + bytes(e[:3]))
         data[layer] = sorted(entries)
-        os.makedirs(os.path.dirname(store), exist_ok=True)
-        with open(store, 'w', encoding='utf-8') as f:
-            json.dump(data, f)
+        import appsettings
+        appsettings.write_json(store, data)
 
     def _send_body(self, cmd, body14):
         """`cmd 10 00` + the wired 64-byte body cut to 14 bytes + `aa 55` (system, clock)."""
@@ -913,11 +912,20 @@ class KeyboardV2:
                 data += bytes([d & 255, d >> 8, usage & 255, flag])
         return bytes(index), bytes(data)
 
+    MACRO_AREA = 3072          # flash 0xA000-0xABFF (the Fn table follows at 0xAC00): 400-byte index + 2672 bytes of macro data
+
     def set_macros(self, macros):
+        """The firmware erases a 1 KB flash page only when a frame starts exactly on it, so the data is sent in pieces that begin at
+        1024 and 2048 (one long run from 400 left those pages unerased: bytes past 1024 read back wrong, tested 2026-11-27 on 770)."""
         index, data = self.macro_blocks(macros)
+        if 400 + len(data) > self.MACRO_AREA:
+            raise ValueError('the macros need %d bytes, the keyboard has room for %d' % (len(data), self.MACRO_AREA - 400))
         self._exchange(0x25, 400, index, timeout=1.0, last_flag=False)
-        if data:
-            self._exchange(0x25, len(data), data, timeout=1.0, addr_start=400)
+        start = 400
+        while start < 400 + len(data):
+            end = min(400 + len(data), (start // 1024 + 1) * 1024)
+            self._exchange(0x25, end - start, data[start - 400:end - 400], timeout=1.0, addr_start=start, last_flag=end == 400 + len(data))
+            start = end
 
     # --- TFT screen --------------------------------------------------------------------------------
     @staticmethod
