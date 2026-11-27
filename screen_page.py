@@ -4,6 +4,7 @@
 import glob
 import os
 import tkinter as tk
+import dpi
 from tkinter import filedialog, messagebox, ttk
 
 import ak980
@@ -71,8 +72,10 @@ class ScreenPage(Page):
             Btn(left.body, 'Load original animation', lambda: self._load_file(orig, replace=True), height=30, size=9).pack(anchor='w', pady=(8, 0))
         right = Card(body, 'Editor')
         right.pack(side='left', fill='both', expand=True)
-        self.cv = tk.Canvas(right.body, width=W * ZOOM, height=H * ZOOM, bg='#000000', highlightthickness=1, highlightbackground=C['line'],
-                            cursor='crosshair')
+        self.zoom = max(ZOOM, int(ZOOM * dpi.SCALE))    # 2x at 100 %, 3x at 150 % ... (whole pixels so the mouse maps exactly)
+        with dpi.raw():                                 # the editor maps mouse pixels to picture pixels 1:zoom
+            self.cv = tk.Canvas(right.body, width=W * self.zoom, height=H * self.zoom, bg='#000000', highlightthickness=1, highlightbackground=C['line'],
+                                cursor='crosshair')
         self.cv.pack(anchor='w')
         self.cv.bind('<ButtonPress-1>', self._down)
         self.cv.bind('<B1-Motion>', self._drag)
@@ -197,7 +200,7 @@ class ScreenPage(Page):
         win = tk.Toplevel(self)
         win.title('Screen library')
         win.configure(bg=C['bg'])
-        win.geometry('420x380')
+        win.geometry('%dx%d' % (dpi.S(420), dpi.S(380)))
         win.transient(self.winfo_toplevel())
         label(win, 'Your saved animations', 12, True, C['text'], C['bg']).pack(anchor='w', padx=16, pady=(14, 6))
         lb = listbox(win, 10)
@@ -358,7 +361,7 @@ class ScreenPage(Page):
             return
         try:
             from PIL import ImageTk
-            self.photo = ImageTk.PhotoImage(self.frames[self.cur].img.resize((W * ZOOM, H * ZOOM)))
+            self.photo = ImageTk.PhotoImage(self.frames[self.cur].img.resize((W * self.zoom, H * self.zoom)))
             self.cv.create_image(0, 0, image=self.photo, anchor='nw')
         except Exception:
             pass
@@ -409,7 +412,7 @@ class ScreenPage(Page):
             return
         from PIL import ImageDraw
         f = self.frames[self.cur]
-        x, y = e.x // ZOOM, e.y // ZOOM
+        x, y = e.x // self.zoom, e.y // self.zoom
         t = self.tool.get()
         f.push_undo()
         d = ImageDraw.Draw(f.img)
@@ -426,7 +429,7 @@ class ScreenPage(Page):
         if self.cur is None or self.last is None or self.tool.get() not in ('Brush', 'Eraser'):
             return
         from PIL import ImageDraw
-        x, y = e.x // ZOOM, e.y // ZOOM
+        x, y = e.x // self.zoom, e.y // self.zoom
         self._stroke(ImageDraw.Draw(self.frames[self.cur].img), self.last[0], self.last[1], x, y)
         self.last = (x, y)
         self._draw()
@@ -472,24 +475,20 @@ class ScreenPage(Page):
             return
 
         def done():
-            self.app.kb = None          # the keyboard restarts; the program reconnects by itself
+            old, self.app.kb = self.app.kb, None      # the keyboard restarts; the program reconnects by itself
+            if hasattr(old, 'close'):
+                old.close()
         self.app.run(lambda kb: kb.factory_reset(), 'Keyboard reset: the screen shows the firmware clock again', after=done)
 
     def sync(self):
         if self.app.require_kb():
-            self.app.run(lambda kb: kb.set_time(), 'Clock sent to the keyboard (the screen shows a time only through the Live screen clock card)')
+            self.app.run(lambda kb: kb.set_time(), "Keyboard clock set to this PC's time")
 
     def upload(self):
         if not self.frames or not self.app.require_kb():
             return
         imgs = [f.img for f in self.frames]
         delays = [f.delay for f in self.frames]
-        try:                                           # keep the user's own picture: the live screen puts it back after its cards
-            import live
-            os.makedirs(os.path.dirname(live.USER_GIF), exist_ok=True)
-            imgs[0].convert('RGB').save(live.USER_GIF, save_all=True, append_images=[i.convert('RGB') for i in imgs[1:]], duration=delays, loop=0)
-        except Exception:
-            pass
         import live
         total, today = live.uploads()
         if today >= 10 and not messagebox.askyesno('Screen', 'You have already uploaded %d times today (%d in total). Every upload erases flash memory on the '
@@ -504,6 +503,11 @@ class ScreenPage(Page):
         def job(kb):
             kb.upload_screen(imgs, delays, prog)
             live.count_upload()
+            try:              # keep the user's own picture (the live screen puts it back after its cards), only once it is really on the keyboard
+                os.makedirs(os.path.dirname(live.USER_GIF), exist_ok=True)
+                imgs[0].convert('RGB').save(live.USER_GIF, save_all=True, append_images=[i.convert('RGB') for i in imgs[1:]], duration=delays, loop=0)
+            except Exception:
+                pass
         self.app.run(job, 'Screen uploaded', after=lambda: (self.up.set_enabled(True), self._upload_count()))
 
     def _upload_count(self):

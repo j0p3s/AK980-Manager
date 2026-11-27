@@ -176,8 +176,8 @@ def song_card(title, artist, status):
 
 
 def meeting_card(title, start, t):
-    mins = int((start - t).total_seconds() // 60)
-    when = 'now' if mins <= 0 else ('in %d min' % mins if mins < 90 else 'at ' + start.strftime('%H:%M'))
+    """The start time, not a countdown: a card whose text changed every minute was a new upload every minute (flash wear, budget gone)."""
+    when = 'now' if start <= t else 'at ' + start.strftime('%H:%M')
     return card_image('Next up', title, when, (255, 180, 60))
 
 
@@ -253,20 +253,46 @@ def _ics_time(value, params):
         return None
 
 
+def _ics_split(line):
+    """(name with parameters, value) of a content line. The value starts at the first ':' outside double quotes: Outlook writes
+    parameters such as TZID="(UTC+01:00) Amsterdam, Berlin" that contain a colon."""
+    quoted = False
+    for i, ch in enumerate(line):
+        if ch == '"':
+            quoted = not quoted
+        elif ch == ':' and not quoted:
+            return line[:i], line[i + 1:]
+    return line, ''
+
+
+def _ics_text(value):
+    """An ICS TEXT value without its escapes (a backslash before a comma, semicolon, backslash or the letter n)."""
+    return re.sub(r'\\(.)', lambda m: ' ' if m.group(1) in 'nN' else m.group(1), value).strip()
+
+
 def parse_ics(text):
-    """[(start, summary)] of the events in an iCalendar text. Repeating events (RRULE) are not expanded; only their first date counts."""
+    """[(start, summary)] of the events in an iCalendar text. Repeating events (RRULE) are not expanded; only their first date counts.
+    Cancelled events are left out."""
     text = re.sub(r'\r?\n[ \t]', '', text)                   # unfold continued lines
     out = []
     for block in re.findall(r'BEGIN:VEVENT(.*?)END:VEVENT', text, re.S):
-        start, summary = None, ''
+        start, summary, cancelled, depth = None, '', False, 0
         for line in block.splitlines():
-            name, _, value = line.partition(':')
-            key = name.split(';')[0].upper()
-            if key == 'DTSTART':
+            name, value = _ics_split(line)
+            key = name.split(';')[0].strip().upper()
+            if key == 'BEGIN':                                  # a VALARM inside the event has its own fields
+                depth += 1
+            elif key == 'END':
+                depth = max(0, depth - 1)
+            elif depth:
+                continue
+            elif key == 'DTSTART':
                 start = _ics_time(value, name)
             elif key == 'SUMMARY':
-                summary = value.replace('\\,', ',').replace('\\n', ' ').strip()
-        if start:
+                summary = _ics_text(value)
+            elif key == 'STATUS' and value.strip().upper() == 'CANCELLED':
+                cancelled = True
+        if start and not cancelled:
             out.append((start, summary or '(no title)'))
     return sorted(out)
 
@@ -282,6 +308,9 @@ def next_event(events, t, within_minutes=60):
 
 def load_ics(source):
     """Text of an .ics file or http(s) URL ('' on any error)."""
+    source = (source or '').strip().strip('"')
+    if re.match(r'webcal://', source, re.I):                      # Google and Apple give webcal:// links: the same file over https
+        source = 'https://' + source[len('webcal://'):]
     try:
         if re.match(r'https?://', source, re.I):
             with urllib.request.urlopen(urllib.request.Request(source, headers={'User-Agent': 'AK980-Manager'}), timeout=15) as r:
@@ -324,7 +353,10 @@ def reminder_due(r, dt, fired):
         now_min = dt.hour * 60 + dt.minute
         return key if tod <= now_min < tod + 30 and key not in fired else None
     if kind.startswith('Every N'):
-        every = max(5, int(r.get('every') or 60))
+        try:
+            every = max(5, int(r.get('every') or 60))
+        except (TypeError, ValueError):                     # a hand-edited or old settings file must not stop the live screen
+            every = 60
         start, end = _hm(r.get('from', '09:00'), 540), _hm(r.get('to', '18:00'), 1080)
         now_min = dt.hour * 60 + dt.minute
         if not start <= now_min <= end:
@@ -447,10 +479,12 @@ class Worker(threading.Thread):
                     focus_total = sum(1 for k, _ in plan if k == 'focus')
                     number = sum(1 for k, _ in plan[:idx + 1] if k == 'focus')
                     self.offer('focus:%d' % idx, pomodoro_card(pos[1], number, focus_total, pos[2], pos[3]))
-        if src.get('calendar') and self.s.get('ics') and due('calendar', 60):
+        if src.get('calendar') and self.s.get('ics') and due('calendar', 300):      # every 5 minutes; a meeting is shown once
             ev = next_event(parse_ics(load_ics(self.s['ics'])), dt)
-            if ev:
-                self.offer('calendar:%s' % ev[0], meeting_card(ev[1], ev[0], dt), temporary=True)
+            key = 'calendar:%s|%s' % ev if ev else None
+            if ev and key not in self.fired:
+                self.fired.add(key)
+                self.offer(key, meeting_card(ev[1], ev[0], dt), temporary=True)
         if src.get('nowplaying') and due('nowplaying', 15):
             np_ = nowplaying()
             if np_ and np_[2] == 'Playing':
@@ -468,11 +502,13 @@ class Worker(threading.Thread):
         if self.pending:
             pr, key, img, temporary, fp = self.pending
             forced = self.pending_force
+            self.budget.refill(t)
+            before = self.budget.tokens
             if self.budget.take(t, force=forced):
                 try:
                     self.upload(img)
                 except OSError as e:
-                    self.budget.tokens += 1.0                      # nothing was written: give the upload back, try again later
+                    self.budget.tokens = before                    # nothing was written: give the upload back (a forced one must not gain)
                     self.status = 'Waiting: %s' % e
                     return
                 self.pending, self.pending_force, self.shown = None, False, fp
@@ -482,11 +518,13 @@ class Worker(threading.Thread):
             else:
                 self.status = 'Waiting for the upload budget (%d min)' % (self.budget.wait_seconds(t) // 60 + 1)
         elif self.back_at and t >= self.back_at:
+            self.budget.refill(t)
+            before = self.budget.tokens
             if self.budget.take(t):
                 try:
                     self.restore()
                 except OSError as e:
-                    self.budget.tokens += 1.0
+                    self.budget.tokens = before
                     self.status = 'Waiting: %s' % e
                     return
                 self.back_at, self.shown = None, None

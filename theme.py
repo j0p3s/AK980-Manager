@@ -3,6 +3,7 @@
 """Dark theme and the small custom widgets used by the GUI (plain Tkinter, no extra packages)."""
 import tkinter as tk
 import tkinter.font as tkfont
+import dpi
 from tkinter import ttk
 
 FONT = 'Segoe UI'
@@ -42,13 +43,13 @@ def setup(root):
     s.configure('TFrame', background=C['bg'])
     s.configure('TLabel', background=C['bg'], foreground=C['text'])
     s.configure('TCombobox', fieldbackground=C['card2'], background=C['card2'], foreground=C['text'], arrowcolor=C['muted'],
-                bordercolor=C['line'], padding=6, selectbackground=C['card2'], selectforeground=C['text'])
+                bordercolor=C['line'], padding=dpi.S(6), selectbackground=C['card2'], selectforeground=C['text'])
     s.map('TCombobox', fieldbackground=[('readonly', C['card2'])], foreground=[('readonly', C['text'])],
           background=[('active', C['hover'])])
-    s.configure('TEntry', fieldbackground=C['card2'], foreground=C['text'], insertcolor=C['text'], bordercolor=C['line'], padding=6)
+    s.configure('TEntry', fieldbackground=C['card2'], foreground=C['text'], insertcolor=C['text'], bordercolor=C['line'], padding=dpi.S(6))
     s.configure('TSpinbox', fieldbackground=C['card2'], foreground=C['text'], arrowcolor=C['muted'], bordercolor=C['line'],
-                background=C['card2'], padding=4)
-    s.configure('Horizontal.TProgressbar', background=C['accent'], troughcolor=C['card2'], bordercolor=C['card2'], thickness=8)
+                background=C['card2'], padding=dpi.S(4))
+    s.configure('Horizontal.TProgressbar', background=C['accent'], troughcolor=C['card2'], bordercolor=C['card2'], thickness=dpi.S(8))
     s.configure('Vertical.TScrollbar', background=C['card2'], troughcolor=C['card'], bordercolor=C['card'], arrowcolor=C['muted'])
     root.option_add('*TCombobox*Listbox.background', C['card2'])
     root.option_add('*TCombobox*Listbox.foreground', C['text'])
@@ -76,7 +77,7 @@ def fit_width(text, size, bold, pad, width=None):
     """Width for a button or pill: wide enough for the text as it will be shown (translated, bold when it can be), never narrower than
     `width`. Measuring the English text clipped longer translations ("dicionar aos passo")."""
     import i18n
-    need = tkfont.Font(family=FONT, size=size, weight='bold' if bold else 'normal').measure(i18n.tr(text)) + pad
+    need = dpi.unscale(tkfont.Font(family=FONT, size=size, weight='bold' if bold else 'normal').measure(i18n.tr(text))) + pad   # 100 % units
     return max(width or 0, need)
 
 
@@ -204,7 +205,7 @@ class Slider(tk.Frame):
     def _draw(self):
         cv = self.cv
         cv.delete('all')
-        w = max(40, cv.winfo_width())
+        w = max(40, dpi.unscale(cv.winfo_width()))
         frac = (float(self.var.get()) - self.lo) / (self.hi - self.lo)
         x = 8 + frac * (w - 16)
         rrect(cv, 8, 9, w - 8, 13, 2, fill=C['card2'], outline='')
@@ -213,8 +214,8 @@ class Slider(tk.Frame):
         self.val.configure(text=(self.fmt % float(self.var.get())) + self.unit)
 
     def _set(self, e):
-        w = max(40, self.cv.winfo_width())
-        frac = min(1.0, max(0.0, (e.x - 8) / (w - 16)))
+        w = max(40, dpi.unscale(self.cv.winfo_width()))
+        frac = min(1.0, max(0.0, (dpi.unscale(e.x) - 8) / (w - 16)))
         v = self.lo + frac * (self.hi - self.lo)
         v = round(v / self.step) * self.step
         v = max(self.lo, min(self.hi, v))

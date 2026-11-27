@@ -45,7 +45,7 @@ class Collector:
     def _add(self, usage, down, mouse, now):
         """The keyboard applies an event's delay AFTER the event (verified: a press recorded with a long wait before it kept the
         key held and auto-repeated), so the gap to this event is stored on the PREVIOUS event."""
-        if len(self.events) >= self.max_events:
+        if down and len(self.events) >= self.max_events:
             self.full = True
             return
         if self.events and self.last is not None:
@@ -55,12 +55,22 @@ class Collector:
         self.last = now
         self.events.append((usage, down, 10, mouse))
 
+    def _room_for_press(self):
+        """A press is only recorded while there is room for it, its release and the releases of everything still held: a full
+        recording must never end with a key held down (finish() adds those releases even past max_events)."""
+        if len(self.events) + len(self.down) + 2 > self.max_events:
+            self.full = True
+            return False
+        return True
+
     def key(self, scan, extended, down, now):
         u = scan_to_usage(scan, extended)
         if u is None:
             return
         if down:
             if u in self.down:                     # auto-repeat of a held key
+                return
+            if not self._room_for_press():
                 return
             self.down.add(u)
         else:
@@ -75,6 +85,8 @@ class Collector:
             return
         btn, down = b
         if down:
+            if ('m', btn) in self.down or not self._room_for_press():
+                return
             self.down.add(('m', btn))
         elif ('m', btn) not in self.down:
             return

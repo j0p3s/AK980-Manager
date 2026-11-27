@@ -122,7 +122,7 @@ class Tray:
                 return
             for m in (WM_SHOW_REQUEST, WM_TASKBAR_CREATED):                    # let a non-elevated launch reach an elevated copy
                 u32.ChangeWindowMessageFilterEx(self.hwnd, m, 1, None)
-            self._icon = u32.LoadImageW(None, self.icon_path, 1, 16, 16, 0x10)  # IMAGE_ICON, LR_LOADFROMFILE
+            self._icon = u32.LoadImageW(None, self.icon_path, 1, u32.GetSystemMetrics(49) or 16, u32.GetSystemMetrics(50) or 16, 0x10)  # small-icon size of this screen (20 at 125 %, 24 at 150 %)
             self._nid = NOTIFYICONDATAW()
             self._nid.cbSize = ctypes.sizeof(NOTIFYICONDATAW)
             self._nid.hWnd, self._nid.uID = self.hwnd, 1

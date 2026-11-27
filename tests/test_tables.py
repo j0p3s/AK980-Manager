@@ -116,6 +116,20 @@ class Recorder(unittest.TestCase):
         self.assertEqual(ev, [(4, True, 100, False), (4, False, 400, False), (1, True, 250, True),
                               (226, True, 10, False), (1, False, 10, True), (226, False, 10, False)])
         self.assertEqual(recorder.scan_to_usage(0x48, True), 82)       # Up arrow
+
+    def test_full_recording_never_leaves_a_key_held(self):
+        import recorder
+        c = recorder.Collector(max_events=6)
+        c.key(0x1D, False, True, 0.0)                                       # Ctrl held through the whole recording
+        for i, s in enumerate((0x1E, 0x30, 0x2E)):                         # a, b, c tapped: only a fits next to Ctrl's release
+            c.key(s, False, True, i + 0.1)
+            c.key(s, False, False, i + 0.2)
+        ev = c.finish(5.0)
+        self.assertTrue(c.full)
+        self.assertLessEqual(len(ev), 6)
+        downs = [e[0] for e in ev if e[1]]
+        self.assertEqual(sorted(downs), sorted(e[0] for e in ev if not e[1]))   # every press has its release
+        self.assertEqual(ev[-1][:2], (224, False))
         self.assertEqual(recorder.scan_to_usage(0x48, False), 96)      # keypad 8
 
     def test_wait_extends_previous_event(self):

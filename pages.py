@@ -64,11 +64,14 @@ PALETTE = ['#ff3b3b', '#ff8a1f', '#ffd21f', '#3be07a', '#1fd6ff', '#4d6bff', '#a
 
 
 def load_json(path, default):
+    """The file's JSON, or default when it is missing, unreadable or of another type than default (a list where a dict belongs would
+    otherwise stop the program at start)."""
     try:
         with open(path, encoding='utf-8') as f:
-            return json.load(f)
+            data = json.load(f)
     except Exception:
         return default
+    return data if default is None or isinstance(data, type(default)) else default
 
 
 def save_json(path, obj):
@@ -390,7 +393,7 @@ class PerKeyPage(Page):
         self.kv.pack()
         foot = tk.Frame(self, bg=C['bg'])
         foot.pack(fill='x')
-        self.bright = tk.IntVar(value=5)
+        self.bright = tk.IntVar(value=int(app.light.get('perkey_bright', 5)))     # the last applied value, not always 5
         Slider(foot, 'Brightness', self.bright, 0, 5, 1, width=220).pack(side='left')
         Btn(foot, 'Apply to keyboard', self.apply, 'primary', height=38).pack(side='right')
         self.setcur(self.cur)
@@ -468,10 +471,10 @@ class PerKeyPage(Page):
         if not self.app.require_kb():
             return
         save_json(PERKEY_FILE, self.colors)
-        self.app.light['mode'] = 'perkey'
+        br = int(self.bright.get())
+        self.app.light['mode'], self.app.light['perkey_bright'] = 'perkey', br
         save_json(LIGHT_FILE, self.app.light)
         cols = {li: hex_rgb(c) for li, c in self.colors.items()}
-        br = int(self.bright.get())
         self.app.run(lambda kb: kb.set_user_lighting(cols, brightness=br), 'Per-key colours applied')
 
 
@@ -613,6 +616,9 @@ class ReactivePage(Page):
             else:
                 eff = effects.Equalizer('Bars' if self.mode.get() == 'Equalizer' else 'Bass pulse', self.pal.get(), self.gain.get(),
                                         self.scheme.get(), self.bgcol.get(), int(self.amp.get()))
+        except tk.TclError:                                 # a number box holds something that is not a whole number
+            messagebox.showerror('Reactive', 'Enter whole numbers in the Focus timer boxes.')
+            return
         except Exception as e:
             messagebox.showerror('Reactive', 'Could not start: %s\n\nThe music effects need the "soundcard" and "numpy" packages '
                                  '(installed automatically on start).' % e)
@@ -1202,6 +1208,14 @@ def macro_bytes(macros, per=8):
     return (sum(len(events_of(m)) for m in macros) + len(macros)) * per
 
 
+def unique_macro_name(name, macros):
+    """name, or 'name (2)', 'name (3)' ... so no two macros share a name: keys find their macro by name."""
+    taken, base, k = {m['name'] for m in macros}, name, 2
+    while name in taken:
+        name, k = '%s (%d)' % (base, k), k + 1
+    return name
+
+
 def macro_layout(kb):
     """(bytes per step, bytes of room) for the connected keyboard: firmware 769/770 stores 4-byte steps in 2672 bytes (measured on the
     770), the others 8-byte steps in MACRO_BUDGET."""
@@ -1498,14 +1512,32 @@ class MacrosPage(Page):
         return True
 
     def save_and_send(self):
-        if self.save() and self.app.require_kb():
-            self.app.run(lambda kb: kb.set_macros([events_of(m) for m in self.app.macros]), 'Macros sent to the keyboard')
+        if not (self.save() and self.app.require_kb()):
+            return
+        # keys point at macros by position: after a delete or reorder the keyboard's key table must follow, or a key plays another macro
+        kp = self.app.pages.get('Keys')
+        uses = kp is not None and any('macro' in e for m in kp.maps.values() for e in m.values())
+        layers = kp.build_layers() if uses else None
+        macros = [events_of(m) for m in self.app.macros]
+
+        def job(kb):
+            kb.set_macros(macros)
+            if layers:
+                kb.wait_ready()
+                for layer, entries in layers.items():
+                    kb.set_keymap(entries, layer)
+        self.app.run(job, 'Macros sent to the keyboard; the keys that play macros were updated too' if layers else 'Macros sent to the keyboard')
 
     def duplicate(self):
         s = self.lb.curselection()
         if s:
             m = json.loads(json.dumps(self.app.macros[s[0]]))
-            m['name'] += ' copy'
+            m['name'] = unique_macro_name(m['name'] + ' copy', self.app.macros)
+            per, budget = macro_layout(self.app.kb)
+            if macro_bytes(self.app.macros + [m], per) > budget or len(self.app.macros) >= MACRO_SLOTS:
+                messagebox.showerror('Macro', 'There is no room for this macro on the keyboard (%d of %d bytes, at most %d macros). '
+                                     'Delete or shorten another macro first.' % (macro_bytes(self.app.macros + [m], per), budget, MACRO_SLOTS))
+                return
             self.app.macros.append(m)
             self.app.save_macros()
             self.cur = len(self.app.macros) - 1
@@ -1546,8 +1578,14 @@ class MacrosPage(Page):
         except Exception as e:
             messagebox.showerror('Macro', 'Could not import this file: %s' % e)
             return
-        self.app.macros.append({'name': str(d.get('name', 'Imported')), 'delay': 40, 'events': [list(e) for e in ev],
-                                'text': 'Steps: ' + events_summary(ev)})
+        name = unique_macro_name(str(d.get('name', 'Imported'))[:40] or 'Imported', self.app.macros)
+        m = {'name': name, 'delay': 40, 'events': [list(e) for e in ev], 'text': 'Steps: ' + events_summary(ev)}
+        per, budget = macro_layout(self.app.kb)
+        if macro_bytes(self.app.macros + [m], per) > budget or len(self.app.macros) >= MACRO_SLOTS:
+            messagebox.showerror('Macro', 'There is no room for this macro on the keyboard (%d of %d bytes, at most %d macros). '
+                                 'Delete or shorten another macro first.' % (macro_bytes(self.app.macros + [m], per), budget, MACRO_SLOTS))
+            return
+        self.app.macros.append(m)
         self.app.save_macros()
         self.cur = len(self.app.macros) - 1
         self._refresh()

@@ -4,6 +4,7 @@
 import i18n
 import datetime
 import tkinter as tk
+import dpi
 from tkinter import filedialog, messagebox, ttk
 
 import live
@@ -117,7 +118,9 @@ class LivePage(Page):
         pv = Card(self, 'Preview')
         pv.pack(fill='x', pady=12)
         Seg(pv.body, PREVIEWS, self.prev, self._preview).pack(anchor='w')
-        self.canvas = tk.Canvas(pv.body, width=live.W * 2, height=live.H * 2, bg='#000000', highlightthickness=0)
+        with dpi.raw():                                 # the preview shows the card's real pixels
+            self.zoom = max(2, int(2 * dpi.SCALE))
+            self.canvas = tk.Canvas(pv.body, width=live.W * self.zoom, height=live.H * self.zoom, bg='#000000', highlightthickness=0)
         self.canvas.pack(anchor='w', pady=(10, 0))
         Btn(pv.body, 'Send this card to the screen now', self._send, 'ghost', height=34).pack(anchor='w', pady=(10, 0))
         self._refresh_reminders()
@@ -255,7 +258,7 @@ class LivePage(Page):
     def _preview(self):
         try:
             from PIL import ImageTk
-            img = self._card().resize((live.W * 2, live.H * 2))
+            img = self._card().resize((live.W * self.zoom, live.H * self.zoom))
             self.photo = ImageTk.PhotoImage(img)
             self.canvas.delete('all')
             self.canvas.create_image(0, 0, image=self.photo, anchor='nw')

@@ -107,6 +107,70 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(len(log['up']), 1)
 
 
+class LongRunTests(unittest.TestCase):
+    def test_burst_plan_holds_over_days(self):
+        """A new card every minute for two days: the first day may use the stored burst, every later day the plan's count."""
+        from PIL import Image
+        t, ups = [1_800_000_000.0], []
+        w = live.Worker({'enabled': False, 'plan': 'Burst', 'hold_seconds': 120}, upload=lambda img: ups.append(t[0]),
+                        restore=lambda: ups.append(t[0]), clock=lambda: t[0], save=lambda s: None)
+        for n in range(2 * 24 * 60):
+            w.offer('music:%d' % n, Image.new('RGB', (4, 4), (n % 256, n // 256 % 256, 1)), temporary=n % 5 == 0)
+            w.step()
+            t[0] += 60
+        day2 = sum(1 for u in ups if u >= 1_800_000_000 + 86400)
+        self.assertLessEqual(len(ups) - day2, 96 + 8)
+        self.assertEqual(day2, 96)
+
+    def test_failed_forced_upload_gives_nothing_back_extra(self):
+        t = [1_800_000_000.0]
+
+        def fail(img):
+            raise OSError('unplugged')
+        from PIL import Image
+        w = live.Worker({'enabled': False, 'plan': 'Saver'}, upload=fail, restore=lambda: None, clock=lambda: t[0], save=lambda s: None)
+        w.budget.tokens, w.budget.updated = 0.25, t[0]
+        w.send_now(Image.new('RGB', (4, 4)))
+        w.step()
+        self.assertAlmostEqual(w.budget.tokens, 0.25)
+
+
+class CalendarTests(unittest.TestCase):
+    ICS = 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART;TZID="(UTC+01:00) Amsterdam, Berlin":20261127T100000\r\nSUMMARY:Planning\\, Q4\\; budget \\\\ review\r\nBEGIN:VALARM\r\nTRIGGER:-PT15M\r\nDESCRIPTION:Reminder\r\nEND:VALARM\r\nEND:VEVENT\r\nBEGIN:VEVENT\r\nDTSTART:20261127T110000\r\nSUMMARY:Cancelled one\r\nSTATUS:CANCELLED\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
+
+    def test_outlook_quoted_tzid_escapes_and_cancelled(self):
+        ev = live.parse_ics(self.ICS)
+        self.assertEqual(ev, [(datetime.datetime(2026, 11, 27, 10, 0), 'Planning, Q4; budget ' + chr(92) + ' review')])
+
+    def test_a_meeting_is_uploaded_once(self):
+        """The card shows the start time, not a countdown: one upload per meeting, not one a minute."""
+        import tempfile
+        start = datetime.datetime(2026, 11, 27, 10, 0)
+        f = tempfile.NamedTemporaryFile('w', suffix='.ics', delete=False, encoding='utf-8')
+        f.write('BEGIN:VEVENT\nDTSTART:%s\nSUMMARY:Standup\nEND:VEVENT\n' % start.strftime('%Y%m%dT%H%M%S'))
+        f.close()
+        t = [(start - datetime.timedelta(minutes=50)).timestamp()]
+        ups = []
+        s = {'enabled': True, 'plan': 'Burst', 'ics': f.name, 'hold_seconds': 120, 'reminders': [],
+             'sources': {'calendar': True, 'nowplaying': False, 'clock': False}}
+        w = live.Worker(s, upload=lambda img: ups.append('up'), restore=lambda: ups.append('back'), clock=lambda: t[0], save=lambda s: None)
+        for _ in range(60):
+            w.step()
+            t[0] += 60
+        os.unlink(f.name)
+        self.assertEqual(ups.count('up'), 1)
+
+    def test_webcal_links_are_fetched_over_https(self):
+        seen = []
+        orig = live.urllib.request.urlopen
+        live.urllib.request.urlopen = lambda req, timeout=0: seen.append(req.full_url) or (_ for _ in ()).throw(OSError())
+        try:
+            self.assertEqual(live.load_ics('webcal://calendar.example/basic.ics'), '')
+        finally:
+            live.urllib.request.urlopen = orig
+        self.assertEqual(seen, ['https://calendar.example/basic.ics'])
+
+
 class CounterTests(unittest.TestCase):
     def test_counts_per_day(self):
         import tempfile

@@ -16,6 +16,7 @@ import sys
 import threading
 import time
 import tkinter as tk
+import dpi
 from tkinter import messagebox
 
 import ak980
@@ -190,6 +191,7 @@ class ScrollHost(tk.Frame):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
+        dpi.init(self)                                  # before any widget: sizes below are in 100 % units
         debuglog.init()
         self.report_callback_exception = lambda et, ev, tb: debuglog.log('UI ERROR: %s' % ''.join(__import__('traceback').format_exception(et, ev, tb)))
         self.title('Ajazz AK980 V2 Manager')
@@ -252,6 +254,7 @@ class App(tk.Tk):
         """Size the window (never larger than the usable screen) and centre it."""
         self.update_idletasks()
         x0, y0, sw, sh = self._work_area()
+        w, h, minw, minh = dpi.S(w), dpi.S(h), dpi.S(minw), dpi.S(minh)
         w, h = min(w, sw - 20), min(h, sh - 20)
         self.minsize(min(minw, w), min(minh, h))
         self.geometry('%dx%d+%d+%d' % (w, h, x0 + (sw - w) // 2, y0 + (sh - h) // 2))
@@ -495,7 +498,7 @@ class App(tk.Tk):
         win = tk.Toplevel(self)
         win.title('Welcome')
         win.configure(bg=C['bg'])
-        win.geometry('520x400')
+        win.geometry('%dx%d' % (dpi.S(520), dpi.S(400)))
         win.transient(self)
         label(win, 'Welcome', 18, True, C['text'], C['bg']).pack(anchor='w', padx=24, pady=(20, 4))
         label(win, 'Control software for the AJAZZ AK980 (V2) PRO keyboard, in English. Three quick things:', 10, False, C['muted'], C['bg'],
@@ -721,6 +724,7 @@ def main():
         selftest()
         return
     _set_app_id()
+    dpi.enable_awareness()                         # sharp on scaled screens; sizes are scaled in dpi.py
     import bootstrap
     r = bootstrap.run_startup()
     if r == 'staged':                              # packaged .exe: a helper swaps the folder after we exit and restarts the new version

@@ -3,6 +3,7 @@
 """An on-screen AK980: clickable / paintable keycaps drawn on a canvas, laid out like the real keyboard."""
 import html
 import tkinter as tk
+import dpi
 
 import keys
 import theme
@@ -94,13 +95,13 @@ class KeyboardView(tk.Canvas):
         return None
 
     def _down(self, e):
-        li = self._hit(e.x, e.y)
+        li = self._hit(dpi.unscale(e.x), dpi.unscale(e.y))
         self._last = li
         if li is not None and self.on_press:
             self.on_press(li)
 
     def _move(self, e):
-        li = self._hit(e.x, e.y)
+        li = self._hit(dpi.unscale(e.x), dpi.unscale(e.y))
         if li is not None and li != self._last:
             self._last = li
             if self.on_drag:
