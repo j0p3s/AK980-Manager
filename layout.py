@@ -90,7 +90,7 @@ def _build():
             continue
         for base in 'aeiouAEIOUcCnN':
             comp = unicodedata.normalize('NFC', base + mark)
-            if len(comp) == 1 and comp not in direct:
+            if len(comp) == 1 and comp not in direct and base in direct:   # non-Latin layouts (Greek ...) have no 'a'
                 direct[comp] = [dead[acc], direct[base]]
     for acc, step in dead.items():                                        # a lone accent character = dead key + Space
         direct.setdefault(acc, [step, (SPACE, False, False)])

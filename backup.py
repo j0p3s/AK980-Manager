@@ -7,7 +7,8 @@ import re
 import zipfile
 
 DATA = os.path.join(os.environ.get('APPDATA', '.'), 'AK980Manager')
-ALLOWED = re.compile(r'^(?:[A-Za-z0-9_.\- ]+\.(?:json|gif)|profiles/[A-Za-z0-9_.\- ()]+\.json)$')
+# profile files may have any name profiles.safe_name leaves (accents, commas, '&' ...); never a path separator, ':' or a control character
+ALLOWED = re.compile(r'^(?:[A-Za-z0-9_.\- ]+\.(?:json|gif)|profiles/[^\\/:*?"<>|\x00-\x1f]+\.json)$')
 MAX_BYTES = 50 * 1024 * 1024
 
 

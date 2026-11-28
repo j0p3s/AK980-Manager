@@ -294,9 +294,18 @@ def _nth_weekday(year, month, n, wd, tod):
     return d if d.month == month else None
 
 
-def _occurrences(start, rule, lo, hi):
+def _utc_to_local(d):
+    return d.replace(tzinfo=datetime.timezone.utc).astimezone().replace(tzinfo=None)
+
+
+def _local_to_utc(d):
+    return d.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+
+
+def _occurrences(start, rule, lo, hi, utc=False):
     """Start times of a repeating event (RRULE: FREQ DAILY / WEEKLY / MONTHLY / YEARLY, INTERVAL, BYDAY, UNTIL, COUNT) from `start`,
-    the ones between lo and hi. COUNT counts from the first occurrence, so the series is walked from its start."""
+    the ones between lo and hi. COUNT counts from the first occurrence, so the series is walked from its start. With utc=True start, lo,
+    hi and the result are UTC (a series whose DTSTART ends in 'Z' repeats at the same UTC time, so its local time moves with DST)."""
     p = {}
     for part in rule.split(';'):
         k, _, v = part.partition('=')
@@ -308,6 +317,8 @@ def _occurrences(start, rule, lo, hi):
     except ValueError:
         return []
     until = _ics_time(p['UNTIL'], '') if p.get('UNTIL') else None
+    if until is not None and utc and p['UNTIL'].endswith('Z'):
+        until = _local_to_utc(until)
     if until is not None and len(p['UNTIL']) == 8:
         until += datetime.timedelta(days=1, seconds=-1)               # a date: the whole day counts
     byday = []
@@ -334,7 +345,8 @@ def _occurrences(start, rule, lo, hi):
         elif freq == 'MONTHLY':
             base = _add_months(start.replace(day=1), k * interval)
             if byday:
-                batch = sorted(filter(None, (_nth_weekday(base.year, base.month, nth or 1, wd, start) for nth, wd in byday)))
+                batch = sorted(set(filter(None, (_nth_weekday(base.year, base.month, i, wd, start)          # BYDAY=MO: every Monday
+                                                 for nth, wd in byday for i in ((nth,) if nth else (1, 2, 3, 4, 5))))))
             else:
                 batch = [x for x in [_add_months(start, k * interval)] if x]
         elif freq == 'YEARLY':
@@ -370,6 +382,7 @@ def parse_ics(text, now=None):
                 continue
             elif key == 'DTSTART':
                 e['start'] = _ics_time(value, name)
+                e['utc'] = value.strip().endswith('Z')
             elif key == 'SUMMARY':
                 e['summary'] = _ics_text(value)
             elif key == 'STATUS' and value.strip().upper() == 'CANCELLED':
@@ -390,7 +403,11 @@ def parse_ics(text, now=None):
             continue
         if e['rrule'] and now is not None and e['recid'] is None:
             lo, hi = now - datetime.timedelta(days=1), now + datetime.timedelta(days=2)
-            for occ in _occurrences(e['start'], e['rrule'], lo, hi):
+            if e.get('utc'):
+                occs = [_utc_to_local(o) for o in _occurrences(_local_to_utc(e['start']), e['rrule'], _local_to_utc(lo), _local_to_utc(hi), utc=True)]
+            else:
+                occs = _occurrences(e['start'], e['rrule'], lo, hi)
+            for occ in occs:
                 if occ not in e['exdates'] and (e['uid'], occ) not in moved:
                     out.append((occ, e['summary'] or '(no title)'))
         else:

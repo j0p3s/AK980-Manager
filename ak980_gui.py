@@ -548,7 +548,8 @@ class App(tk.Tk):
         info.cbSize = ctypes.sizeof(info)
         if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(info)):
             return 0.0
-        return (ctypes.windll.kernel32.GetTickCount() - info.dwTime) / 1000.0
+        # both are 32-bit millisecond counters; ctypes returns GetTickCount as a signed int (negative after ~25 days of uptime)
+        return ((ctypes.windll.kernel32.GetTickCount() - info.dwTime) & 0xFFFFFFFF) / 1000.0
 
     def _check_update(self):
         """Packaged program: look for a newer release now and then. 'Let me know' shows a bar in this window; 'Update automatically'
@@ -737,7 +738,8 @@ def main():
         if tray.show_running_instance():
             sys.exit(0)
     app = App()
-    if '--startup' in sys.argv:                    # started by the Windows-startup task: begin in the tray
+    import appsettings
+    if '--startup' in sys.argv and appsettings.get('start_in_tray'):   # started by the Windows-startup task: begin in the tray
         app.withdraw() if app.tray.ok else app.iconify()
     app.mainloop()
 

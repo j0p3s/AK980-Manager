@@ -138,9 +138,10 @@ def send_text(text, delay=0.004):
     for i in range(0, len(data), 2):
         unit = int.from_bytes(data[i:i + 2], 'little')
         pair = (_INPUT * 2)()
+        vk = {0x0A: 0x0D, 0x09: 0x09}.get(unit)                 # a line break / tab as the real Enter / Tab key: many apps ignore U+000A
         for k, up in enumerate((0, 2)):                         # KEYEVENTF_UNICODE | (KEYUP)
             pair[k].type = 1
-            pair[k].ki = _KEYBDINPUT(0, unit, 4 | up, 0, 0)
+            pair[k].ki = _KEYBDINPUT(vk, 0, up, 0, 0) if vk else _KEYBDINPUT(0, unit, 4 | up, 0, 0)
         ctypes.windll.user32.SendInput(2, pair, ctypes.sizeof(_INPUT))
         time.sleep(delay)
 

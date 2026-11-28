@@ -5,7 +5,7 @@ import os
 
 PATH = os.path.join(os.environ.get('APPDATA', '.'), 'AK980Manager', 'settings.json')
 DEFAULTS = {'close_to_tray': True, 'last_version': '', 'calibration': [1.0, 1.0, 1.0], 'language': 'English', 'welcome_done': False,
-            'updates': 'Update automatically', 'debug_log': False}
+            'updates': 'Update automatically', 'debug_log': False, 'start_in_tray': True}
 
 
 def write_json(path, obj, indent=None):

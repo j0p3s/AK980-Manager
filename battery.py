@@ -44,7 +44,7 @@ def parse(text):
 
 def read():
     """[(name, connected, percent or None)] for AK980 keyboards paired over Bluetooth. Takes a few seconds."""
-    r = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command', SCRIPT], capture_output=True, text=True,
+    r = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command', SCRIPT], capture_output=True, text=True, errors='replace',
                        timeout=40, creationflags=NO_WINDOW)
     return parse(r.stdout)
 

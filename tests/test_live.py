@@ -173,6 +173,19 @@ class CalendarTests(unittest.TestCase):
         self.assertEqual([e[0] for e in live.parse_ics('BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:m\nDTSTART:20260113T140000\nRRULE:FREQ=MONTHLY;BYDAY=2TU\nSUMMARY:Board\nEND:VEVENT\nEND:VCALENDAR\n', now=D(2026, 12, 7, 12, 0))], [D(2026, 12, 8, 14, 0)])   # 2nd Tuesday
         self.assertEqual(len(live.parse_ics('BEGIN:VEVENT\nUID:c\nDTSTART:20261120T080000\nRRULE:FREQ=DAILY;COUNT=7\nSUMMARY:Course\nEND:VEVENT\n')), 1)                     # without now: the first date only
 
+    def test_utc_series_keeps_its_utc_time_across_dst(self):
+        D = datetime.datetime
+        # weekly at 09:00 UTC from a Tuesday before the October DST change: every week is 09:00 UTC, shown in local time of that day
+        ev = live.parse_ics('BEGIN:VEVENT\nUID:z\nDTSTART:20261020T090000Z\nRRULE:FREQ=WEEKLY\nSUMMARY:Sync\nEND:VEVENT\n', now=D(2026, 11, 3, 8, 0))
+        self.assertEqual([e[0] for e in ev], [live._utc_to_local(D(2026, 11, 3, 9, 0))])
+        ev = live.parse_ics('BEGIN:VEVENT\nUID:z\nDTSTART:20261020T090000Z\nRRULE:FREQ=WEEKLY;UNTIL=20261027T090000Z\nSUMMARY:Sync\nEND:VEVENT\n', now=D(2026, 11, 3, 8, 0))
+        self.assertEqual(ev, [])                                          # the series ended a week before
+
+    def test_monthly_byday_without_number_means_every_such_day(self):
+        D = datetime.datetime
+        ev = live.parse_ics('BEGIN:VEVENT\nUID:m\nDTSTART:20260105T100000\nRRULE:FREQ=MONTHLY;BYDAY=MO\nSUMMARY:Plan\nEND:VEVENT\n', now=D(2026, 12, 14, 9, 0))
+        self.assertEqual([e[0] for e in ev], [D(2026, 12, 14, 10, 0)])   # the second Monday counts too
+
     def test_webcal_links_are_fetched_over_https(self):
         seen = []
         orig = live.urllib.request.urlopen

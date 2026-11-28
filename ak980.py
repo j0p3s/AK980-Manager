@@ -64,6 +64,8 @@ k32.CreateFileW.restype = w.HANDLE
 k32.CreateFileW.argtypes = [w.LPCWSTR, w.DWORD, w.DWORD, w.LPVOID, w.DWORD, w.DWORD, w.HANDLE]
 k32.CloseHandle.argtypes = [w.HANDLE]
 k32.WriteFile.argtypes = [w.HANDLE, ctypes.c_char_p, w.DWORD, ctypes.POINTER(w.DWORD), w.LPVOID]
+k32.ReadFile.argtypes = [w.HANDLE, w.LPVOID, w.DWORD, ctypes.POINTER(w.DWORD), w.LPVOID]
+k32.CancelIoEx.argtypes = [w.HANDLE, w.LPVOID]
 hid.HidD_SetFeature.argtypes = [w.HANDLE, ctypes.c_char_p, w.ULONG]
 hid.HidD_GetFeature.argtypes = [w.HANDLE, ctypes.c_char_p, w.ULONG]
 setupapi.SetupDiGetClassDevsW.restype = w.HANDLE
@@ -954,7 +956,11 @@ class KeyboardV2:
         hw = k32.CreateFileW(path3, 0x40000000, 3, None, 3, 0, None)
         hr = k32.CreateFileW(path3, 0x80000000, 3, None, 3, 0, None)
         if hw in (None, w.HANDLE(-1).value) or hr in (None, w.HANDLE(-1).value):
-            raise OSError('cannot open screen interface (error %d)' % ctypes.get_last_error())
+            err = ctypes.get_last_error()
+            for h in (hw, hr):                                     # do not leak the one that did open
+                if h not in (None, w.HANDLE(-1).value):
+                    k32.CloseHandle(h)
+            raise OSError('cannot open screen interface (error %d)' % err)
         acks = queue.Queue()
 
         def reader():
@@ -965,29 +971,34 @@ class KeyboardV2:
                     break
                 acks.put(bytes(buf.raw[1:got.value]))
         threading.Thread(target=reader, daemon=True).start()
-        with self.lock:
-            for seq in range(total):
-                chunk = data[seq * 4096:(seq + 1) * 4096].ljust(4096, b'\0')
-                report = bytes([0, 0xAA, 0x50, seq & 255, seq >> 8, total & 255, total >> 8, 0x50, 0x06]) + chunk
-                for attempt in range(4):
-                    while not acks.empty():
-                        acks.get_nowait()
-                    n = w.DWORD()
-                    if not k32.WriteFile(hw, report, len(report), ctypes.byref(n), None) or n.value != len(report):
-                        raise OSError('screen write failed at chunk %d (error %d)' % (seq, ctypes.get_last_error()))
-                    ok = False
-                    end = time.time() + 2.0
-                    while time.time() < end and not ok:
-                        try:
-                            ok = acks.get(timeout=0.05)[:2] == bytes([0x55, 0x41])
-                        except queue.Empty:
-                            pass
-                    if ok:
-                        break
-                else:
-                    raise OSError('The keyboard did not answer while the screen picture was sent (chunk %d of %d).' % (seq + 1, total))
-                if progress:
-                    progress(seq + 1, total)
+        try:
+            with self.lock:
+                for seq in range(total):
+                    chunk = data[seq * 4096:(seq + 1) * 4096].ljust(4096, b'\0')
+                    report = bytes([0, 0xAA, 0x50, seq & 255, seq >> 8, total & 255, total >> 8, 0x50, 0x06]) + chunk
+                    for attempt in range(4):
+                        while not acks.empty():
+                            acks.get_nowait()
+                        n = w.DWORD()
+                        if not k32.WriteFile(hw, report, len(report), ctypes.byref(n), None) or n.value != len(report):
+                            raise OSError('screen write failed at chunk %d (error %d)' % (seq, ctypes.get_last_error()))
+                        ok = False
+                        end = time.time() + 2.0
+                        while time.time() < end and not ok:
+                            try:
+                                ok = acks.get(timeout=0.05)[:2] == bytes([0x55, 0x41])
+                            except queue.Empty:
+                                pass
+                        if ok:
+                            break
+                    else:
+                        raise OSError('The keyboard did not answer while the screen picture was sent (chunk %d of %d).' % (seq + 1, total))
+                    if progress:
+                        progress(seq + 1, total)
+        finally:                                                   # the reader thread ends when its ReadFile is cancelled
+            k32.CancelIoEx(hr, None)
+            k32.CloseHandle(hr)
+            k32.CloseHandle(hw)
 
     def read_macro_index(self):
         return self._exchange(0x15, 400)

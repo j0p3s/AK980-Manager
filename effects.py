@@ -221,7 +221,7 @@ def gpu_load():
     import subprocess
     exe = shutil.which('nvidia-smi') or 'C:/Windows/System32/nvidia-smi.exe'
     try:
-        r = subprocess.run([exe, '--query-gpu=utilization.gpu', '--format=csv,noheader,nounits'], capture_output=True, text=True,
+        r = subprocess.run([exe, '--query-gpu=utilization.gpu', '--format=csv,noheader,nounits'], capture_output=True, text=True, errors='replace',
                            timeout=3, creationflags=0x08000000)
         return max(0.0, min(1.0, int(r.stdout.strip().splitlines()[0]) / 100.0))
     except (OSError, ValueError, IndexError, subprocess.SubprocessError):

@@ -511,6 +511,11 @@ ENTRIES = {
     'All keys reset to default': ('Todas as teclas repostas por defeito', 'Toutes les touches ont été réinitialisées', 'Todas las teclas restablecidas', 'Tüm tuşlar varsayılana sıfırlandı'),
     'Stop recording': ('Parar gravação', "Arrêter l'enregistrement", 'Detener grabación', 'Kaydı durdur'),
     'Recorded macro': ('Macro gravada', 'Macro enregistrée', 'Macro grabada', 'Kaydedilen makro'),
+    'When Windows starts it, start hidden in the tray (off: the window opens)': (
+        'Quando o Windows o inicia, começar escondido na bandeja (desligado: a janela abre)',
+        'Au démarrage par Windows, démarrer caché dans la zone de notification (désactivé : la fenêtre s\'ouvre)',
+        'Cuando Windows lo inicia, empezar oculto en la bandeja (desactivado: se abre la ventana)',
+        'Windows başlattığında tepside gizli başla (kapalı: pencere açılır)'),
     'Hide to the tray': ('Esconder na bandeja', 'Réduire dans la zone de notification', 'Ocultar en la bandeja', 'Tepsiye gizle'),
     'Quit the program': ('Sair do programa', 'Quitter le programme', 'Salir del programa', 'Programdan çık'),
     'Version %s (packaged program)': ('Versão %s (programa empacotado)', 'Version %s (programme empaqueté)', 'Versión %s (programa empaquetado)', 'Sürüm %s (paketlenmiş program)'),

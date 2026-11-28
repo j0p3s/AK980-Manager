@@ -263,6 +263,20 @@ class Backup(unittest.TestCase):
                 zz.writestr('../evil.json', '{}')
             with self.assertRaises(ValueError):
                 backup.check(evil)
+            for bad in ('profiles/../evil.json', 'profiles/a\b.json', 'profiles/c:x.json', 'profiles/sub/x.json'):
+                with zipfile.ZipFile(evil, 'w') as zz:
+                    zz.writestr(bad, '{}')
+                with self.assertRaises(ValueError):
+                    backup.check(evil)
+
+    def test_profile_names_with_accents_are_backed_up(self):
+        import backup
+        with tempfile.TemporaryDirectory() as src:
+            os.makedirs(os.path.join(src, 'profiles'))
+            for n in ('Música', 'Jogos, noite', 'Trabalho & casa'):
+                with open(os.path.join(src, 'profiles', n + '.json'), 'w', encoding='utf-8') as f:
+                    f.write('{}')
+            self.assertEqual(len(backup.files(src)), 3)
 
 
 if __name__ == '__main__':

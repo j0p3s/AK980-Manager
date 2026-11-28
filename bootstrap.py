@@ -80,7 +80,7 @@ def _pip(args, timeout=300):
     if sys.prefix == getattr(sys, 'base_prefix', sys.prefix) and '--user' not in args and args[0] == 'install':
         cmd.append('--user')            # not in a virtualenv: install for the current user, no admin rights needed
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, creationflags=NO_WINDOW)
+        r = subprocess.run(cmd, capture_output=True, text=True, errors='replace', timeout=timeout, creationflags=NO_WINDOW)
         if r.returncode != 0:
             log('pip %s failed: %s' % (' '.join(args), (r.stderr or r.stdout).strip()[-400:]))
         return r.returncode == 0

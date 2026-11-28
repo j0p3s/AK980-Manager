@@ -56,13 +56,17 @@ class OverviewPage(Page):
         self.ver.pack(anchor='w')
 
     def on_show(self):
+        if getattr(self, '_job', None):          # coming back within 2 s: do not start a second refresh loop
+            self.after_cancel(self._job)
+            self._job = None
         self._tick()
 
     def _tick(self):
+        self._job = None
         if self.app.current != 'Overview':
             return
         self.refresh()
-        self.after(2000, self._tick)
+        self._job = self.after(2000, self._tick)
 
     def refresh(self):
         a, t = self.app, self.tiles
@@ -132,8 +136,11 @@ class ConnectionPage(Page):
             self.rows[k].configure(text='checking...', fg=C['muted'])
 
         def work():
-            wired = bool(ak980.find_path() or ak980.find_path('mi_02', ak980.NEW_FIRMWARE_PID))
-            dongle = bool(ak980.find_path(pid=ak980.DONGLE_PID))
+            try:
+                wired = bool(ak980.find_path() or ak980.find_path('mi_02', ak980.NEW_FIRMWARE_PID))
+                dongle = bool(ak980.find_path(pid=ak980.DONGLE_PID))
+            except Exception:                    # never leave the rows on 'checking...'
+                wired = dongle = False
             try:
                 import battery
                 found = battery.read()
@@ -154,6 +161,14 @@ class ConnectionPage(Page):
             put('bt', False, 'No keyboard paired')
 
     def reconnect(self):
-        self.app.kb = None
+        if self.app.streaming:
+            self.app.status_msg('A reactive effect is running - stop it on the Reactive page first.', 'err')
+            return
+        old, self.app.kb = self.app.kb, None
+        if hasattr(old, 'close'):            # firmware 769/770: two handles and a reader thread that would keep stealing replies
+            try:
+                old.close()
+            except Exception:
+                pass
         self.app.status_msg('Looking for the keyboard...', 'info')
         self.after(2500, self.check)

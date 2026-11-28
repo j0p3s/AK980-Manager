@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relatório AK980 Manager 3.0.0</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#ffffff; --text:#1d2330; --muted:#5d6678; --line:#e1e4ea; --accent:#3d5afe; --ok:#1b8a4b; --warn:#b26a00; --chip:#eef1ff; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg:#12151b; --card:#1a1e26; --text:#e6e9ef; --muted:#9aa3b5; --line:#2a303b; --accent:#7d8cff; --ok:#4cc38a; --warn:#f0a94a; --chip:#232a3d; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.55 "Segoe UI", system-ui, sans-serif; }
+  main { max-width:980px; margin:0 auto; padding:32px 16px 64px; }
+  h1 { font-size:28px; margin:0 0 4px; }
+  h2 { font-size:19px; margin:36px 0 12px; padding-bottom:6px; border-bottom:1px solid var(--line); }
+  .sub { color:var(--muted); margin:0 0 20px; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin:20px 0; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  .stat b { display:block; font-size:24px; }
+  .stat span { color:var(--muted); font-size:13px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin:12px 0; }
+  .card h3 { margin:0 0 8px; font-size:16px; }
+  .card p { margin:6px 0; }
+  .lbl { color:var(--muted); font-weight:600; }
+  .chip { display:inline-block; background:var(--chip); color:var(--accent); border-radius:20px; padding:1px 10px; font-size:12px; font-weight:600; margin-right:6px; }
+  .chip.new { color:var(--ok); }
+  .chip.warn { color:var(--warn); }
+  code { font-family:Consolas, monospace; font-size:13px; background:var(--chip); padding:1px 5px; border-radius:4px; overflow-wrap:anywhere; }
+  table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top; font-size:14px; }
+  th { color:var(--muted); font-weight:600; }
+  ul { padding-left:20px; }
+  li { margin:4px 0; }
+  .note { border-left:4px solid var(--warn); }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Relatório — Ajazz AK980 V2 Manager 3.0.0</h1>
+  <p class="sub">Revisão de todo o programa feita enquanto estava ausente, em 28/11/2026. Versão anterior: 2.8.7. Versão lançada: <b>3.0.0</b>.</p>
+
+  <div class="stats">
+    <div class="stat"><b>1</b><span>funcionalidade nova</span></div>
+    <div class="stat"><b>11</b><span>correções</span></div>
+    <div class="stat"><b>62</b><span>testes automáticos a passar (eram 59)</span></div>
+    <div class="stat"><b>0</b><span>erros ao abrir as 11 páginas</span></div>
+  </div>
+
+  <h2>Resumo</h2>
+  <p>Revi o programa todo: as partes que a passagem de testemunho dava como nunca revistas linha a linha (<code>layout.py</code>, bateria, diagnóstico, página Ligação), o calendário, o envio para o ecrã e as ações do PC. Também procurei, em todos os ficheiros, os tipos de erro mais comuns: ficheiros e programas externos, código a correr em segundo plano, ligações ao Windows e caixas de números. Corrigi o que estava errado, acrescentei a opção que pediu e lancei a versão 3.0.0 no GitHub. Os utilizadores com atualização automática recebem-na sozinhos.</p>
+
+  <h2>Adicionado</h2>
+  <div class="card">
+    <h3><span class="chip new">Novo</span>Arrancar com o Windows escondido na bandeja (opção na página Sistema)</h3>
+    <p><span class="lbl">O que faz:</span> no cartão <b>Arranque</b> da página Sistema há um novo interruptor: <i>“Quando o Windows o inicia, começar escondido na bandeja (desligado: a janela abre)”</i>. Ligado: o programa arranca com o Windows só com o ícone na bandeja. Desligado: arranca com a janela aberta.</p>
+    <p><span class="lbl">Por defeito:</span> ligado, que era o comportamento de antes. O botão “Arrancar com o Windows (como administrador)” continua a criar a tarefa do Windows.</p>
+    <p><span class="lbl">Ficheiros:</span> <code>appsettings.py</code> (nova definição <code>start_in_tray</code>), <code>pages.py</code> (interruptor), <code>ak980_gui.py</code> (arranque), <code>i18n_catalog.py</code> (texto nas 5 línguas).</p>
+    <p><span class="lbl">Verificado:</span> a página Sistema abre sem erros, o interruptor aparece traduzido em português e cabe no cartão, e ligar/desligar grava a definição. A sua definição ficou como estava (ligada).</p>
+  </div>
+
+  <h2>Corrigido</h2>
+
+  <div class="card">
+    <h3><span class="chip">Ecrã</span>Envio para o ecrã no firmware 769/770 deixava ligações abertas</h3>
+    <p><span class="lbl">Problema:</span> cada envio de imagem para o ecrã abria duas ligações ao teclado e uma tarefa em segundo plano, e nunca as fechava. O Ecrã ao vivo envia muitas vezes, por isso acumulavam-se enquanto o programa estava aberto. Se só uma das duas ligações abrisse, a outra também ficava aberta.</p>
+    <p><span class="lbl">Correção:</span> as duas ligações fecham sempre no fim do envio, mesmo quando ele falha, e a tarefa em segundo plano termina.</p>
+    <p><span class="lbl">Ficheiro:</span> <code>ak980.py</code> (<code>KeyboardV2.upload_screen</code>).</p>
+  </div>
+
+  <div class="card">
+    <h3><span class="chip">Ligação</span>“Religar agora” não fechava a ligação antiga</h3>
+    <p><span class="lbl">Problema:</span> no firmware 769/770 a ligação antiga ficava aberta e podia “roubar” as respostas do teclado à ligação nova. Se a verificação falhasse, as linhas da página ficavam para sempre em “a verificar...”.</p>
+    <p><span class="lbl">Correção:</span> a ligação antiga é fechada (como já acontecia quando o teclado é desligado). Com um efeito reativo a correr, aparece o aviso para o parar primeiro. Se a verificação falhar, as linhas mostram “Não detetado”.</p>
+    <p><span class="lbl">Ficheiro:</span> <code>home_pages.py</code>.</p>
+  </div>
+
+  <div class="card">
+    <h3><span class="chip">Calendário</span>Reuniões repetidas em hora UTC ficavam uma hora erradas na mudança de hora</h3>
+    <p><span class="lbl">Problema:</span> era o ponto em aberto da última sessão. Uma série com hora UTC (termina em “Z”) era convertida para hora local só uma vez, e as repetições depois da mudança de hora de verão/inverno ficavam uma hora ao lado.</p>
+    <p><span class="lbl">Correção:</span> estas séries são calculadas em UTC e cada repetição é convertida para hora local, como manda a norma iCalendar. O mesmo para a data de fim (UNTIL).</p>
+    <p><span class="lbl">Ficheiro:</span> <code>live.py</code>. <span class="lbl">Teste novo:</span> <code>test_utc_series_keeps_its_utc_time_across_dst</code>.</p>
+  </div>
+
+  <div class="card">
+    <h3><span class="chip">Calendário</span>Reunião mensal “todas as segundas-feiras” só mostrava a primeira</h3>
+    <p><span class="lbl">Correção:</span> <code>FREQ=MONTHLY;BYDAY=MO</code> (sem número) passa a dar todas as segundas-feiras do mês. “2.ª terça-feira” e “última sexta” continuam como estavam.</p>
+    <p><span class="lbl">Ficheiro:</span> <code>live.py</code>. <span class="lbl">Teste novo:</span> <code>test_monthly_byday_without_number_means_every_such_day</code>.</p>
+  </div>
+
+  <div class="card">
+    <h3><span class="chip">Cópias de segurança</span>Perfis com acentos ou símbolos ficavam fora da cópia</h3>
+    <p><span class="lbl">Problema:</span> um perfil chamado, por exemplo, “Música” ou “Jogos, noite” não entrava na cópia de segurança, sem nenhum aviso.</p>
+    <p><span class="lbl">Correção:</span> a cópia aceita qualquer nome que o programa permite gravar. Nomes com caminhos (<code>..</code>, <code>\</code>, <code>/</code>, <code>:</code>) continuam recusados, por segurança.</p>
+    <p><span class="lbl">Ficheiro:</span> <code>backup.py</code>. <span class="lbl">Testes:</span> um novo para nomes com acentos e mais 4 casos maliciosos que têm de ser recusados.</p>
+  </div>
+
+  <div class="card">
+    <h3><span class="chip">Ações do PC</span>“Enviar texto”: mudanças de linha ignoradas por algumas aplicações</h3>
+    <p><span class="lbl">Correção:</span> as mudanças de linha e as tabulações são escritas com as teclas Enter e Tab reais. O resto do texto continua a ser escrito como antes, por isso funciona em qualquer esquema de teclado.</p>
+    <p><span class="lbl">Ficheiro:</span> <code>pcactions.py</code>.</p>
+  </div>
+
+  <div class="card">
+    <h3><span class="chip">Atualizações</span>Atualização automática deixava de esperar pelo PC parado depois de 25 dias ligado</h3>
+    <p><span class="lbl">Problema:</span> o contador de tempo do Windows era lido com sinal. Ao fim de cerca de 25 dias com o PC ligado, o tempo sem uso dava negativo e a atualização automática nunca se instalava.</p>
+    <p><span class="lbl">Correção:</span> a conta é feita com o contador sem sinal, de 32 bits, como o Windows o define. <span class="lbl">Ficheiro:</span> <code>ak980_gui.py</code>.</p>
+  </div>
+
+  <div class="card">
+    <h3><span class="chip">Páginas</span>Resumo e Ecrã ao vivo começavam uma segunda atualização periódica</h3>
+    <p><span class="lbl">Problema:</span> sair de uma destas páginas e voltar em menos de 2 segundos punha duas atualizações periódicas a correr ao mesmo tempo, e mais a cada vez que se repetisse.</p>
+    <p><span class="lbl">Correção:</span> a atualização anterior é cancelada antes de começar a nova. <span class="lbl">Ficheiros:</span> <code>home_pages.py</code>, <code>live_page.py</code>.</p>
+  </div>
+
+  <div class="card">
+    <h3><span class="chip">Robustez</span>Saída de programas externos com caracteres invulgares</h3>
+    <p><span class="lbl">Problema:</span> a leitura da bateria Bluetooth, a instalação de pacotes, a leitura da GPU (nvidia-smi) e a conversão de vídeo (ffmpeg) podiam falhar com erro se o programa externo escrevesse certos caracteres. Por exemplo, um caminho de ficheiro com “Á” ou “Í” no ffmpeg.</p>
+    <p><span class="lbl">Correção:</span> esses caracteres passam a ser substituídos em vez de darem erro. <span class="lbl">Ficheiros:</span> <code>battery.py</code>, <code>bootstrap.py</code>, <code>effects.py</code>, <code>videoframes.py</code>.</p>
+  </div>
+
+  <div class="card">
+    <h3><span class="chip">Robustez</span>Esquemas de teclado sem letras latinas</h3>
+    <p><span class="lbl">Problema:</span> num esquema como o grego, que tem teclas de acento mas não tem a letra “a”, a lista de caracteres podia dar erro.</p>
+    <p><span class="lbl">Correção:</span> esses acentos são ignorados quando a letra base não existe. <span class="lbl">Ficheiro:</span> <code>layout.py</code>. O teclado português não é afetado.</p>
+  </div>
+
+  <div class="card">
+    <h3><span class="chip">Robustez</span>Ligação ao Windows declarada por completo</h3>
+    <p><span class="lbl">Correção:</span> as funções do Windows <code>ReadFile</code> e <code>CancelIoEx</code> passam a ter os tipos dos argumentos declarados, como as outras já tinham. <span class="lbl">Ficheiro:</span> <code>ak980.py</code>.</p>
+  </div>
+
+  <h2>Removido</h2>
+  <ul>
+    <li>Importações que não eram usadas: <code>json</code> e <code>theme</code> em <code>profiles.py</code>, e <code>hex_rgb</code> em <code>screen_page.py</code>. O programa não muda.</li>
+    <li>Nenhuma funcionalidade foi removida.</li>
+  </ul>
+
+  <h2>O que foi revisto e ficou como estava</h2>
+  <ul>
+    <li><code>diagnostics.py</code>: o ficheiro de diagnóstico não inclui dados pessoais (as definições guardadas são só as do programa).</li>
+    <li><code>battery.py</code>: fora a correção de caracteres acima, está correto.</li>
+    <li>Todas as caixas de números (macros, temporizador de foco, lembretes, calibração): os valores inválidos já eram tratados.</li>
+    <li>Todas as ligações ao Windows que devolvem identificadores (handles) usam o tipo de 64 bits correto.</li>
+    <li>A comparação de versões da atualização automática reconhece 3.0.0 como mais nova do que 2.8.7.</li>
+    <li>Análise estática (pyflakes) a todos os ficheiros: não ficou nenhum erro real.</li>
+  </ul>
+
+  <h2>Como foi verificado</h2>
+  <table>
+    <tr><th>Verificação</th><th>Resultado</th></tr>
+    <tr><td>Testes automáticos (<code>python -m unittest discover -s tests</code>)</td><td>62 a passar (3 testes novos; os 2 do calendário falham na versão antiga, o que confirma que testam a correção)</td></tr>
+    <tr><td>Abrir as 11 páginas do programa, sem acesso ao teclado (para não interferir com a cópia que estava aberta)</td><td>0 erros</td></tr>
+    <tr><td>Novo interruptor na página Sistema: texto, tamanho e gravação da definição</td><td>OK</td></tr>
+    <tr><td>Programa empacotado 3.0.0: <code>AK980 Manager.exe --selftest</code></td><td>OK: teclado encontrado pelo cabo (firmware 769/770), Pillow, áudio e brilho</td></tr>
+    <tr><td>Notas da versão nas 5 línguas lidas pelo próprio programa (“Novidades”)</td><td>OK</td></tr>
+  </table>
+
+  <div class="card note">
+    <h3><span class="chip warn">Atenção</span>Não testado no teclado real</h3>
+    <ul>
+      <li><b>Envio para o ecrã</b> (correção das ligações): não enviei nenhuma imagem, porque isso apagava a sua imagem atual no ecrã. Confirme quando voltar: envie uma imagem na página Ecrã e veja se chega.</li>
+      <li><b>“Enviar texto” com mudanças de linha</b>: não o corri, porque escreveria na janela que estivesse aberta. Confirme numa tecla com uma ação “Enviar texto” de várias linhas.</li>
+    </ul>
+  </div>
+
+  <h2>Ainda em aberto (pequeno)</h2>
+  <ul>
+    <li>A alta resolução (DPI) só foi verificada a 125 % (150 % foi simulado).</li>
+    <li>Calendário: eventos com um fuso horário (TZID) diferente do do PC são lidos como hora local.</li>
+    <li><code>pages.py</code> e <code>ak980.py</code> foram revistos por procura de padrões de erro e nas zonas acima, não linha a linha.</li>
+  </ul>
+
+  <h2>Versão e código</h2>
+  <ul>
+    <li>Versão: <b>3.0.0</b> (<code>version.py</code>). Lançamento: <a href="https://github.com/j0p3s/AK980-Manager/releases/tag/v3.0.0">github.com/j0p3s/AK980-Manager/releases/tag/v3.0.0</a></li>
+    <li>Ficheiro do lançamento: <code>AK980-Manager-windows.zip</code> + <code>.sha256</code>. Notas da versão nas 5 línguas.</li>
+    <li>Todo o código foi enviado (push) para <code>main</code>. <code>HANDOFF.md</code> foi atualizado para a próxima sessão.</li>
+  </ul>
+</main>
+</body>
+</html>

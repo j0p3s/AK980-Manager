@@ -5,14 +5,12 @@
 A profile is a plain .json file in %APPDATA%\\AK980Manager\\profiles, so it can be copied, shared or edited by hand.
 Loading one replaces the current settings and sends them to the keyboard.
 """
-import json
 import os
 import re
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
 import pages
-import theme
 from pages import DATA, KEYMAP_FILE, LIGHT_FILE, MACRO_FILE, PERKEY_FILE, Page, load_json, save_json
 from theme import C, Btn, Card, label, listbox
 

@@ -9,7 +9,7 @@ from tkinter import filedialog, messagebox, ttk
 
 import ak980
 import theme
-from pages import Page, Palette, hex_rgb
+from pages import Page, Palette
 from theme import C, Btn, Card, Seg, Slider, label, listbox
 
 W, H, ZOOM = ak980.Keyboard.SCREEN_W, ak980.Keyboard.SCREEN_H, 2          # the editor shows the picture at 2x

@@ -134,13 +134,17 @@ class LivePage(Page):
         live.save_settings(self._settings())
 
     def on_show(self):
+        if getattr(self, '_job', None):          # coming back within 2 s: do not start a second refresh loop
+            self.after_cancel(self._job)
+            self._job = None
         self._status()
         self._tick()
 
     def _tick(self):
+        self._job = None
         if self.app.current == 'Live screen':
             self._status()
-            self.after(2000, self._tick)
+            self._job = self.after(2000, self._tick)
 
     def _status(self):
         w = self.app.live_worker

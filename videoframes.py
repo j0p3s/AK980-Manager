@@ -34,7 +34,7 @@ def extract(video, fps=10, max_frames=140):
     fps = max(1, min(25, int(fps)))
     out = tempfile.mkdtemp(prefix='ak980_video_')
     try:
-        r = subprocess.run(command(exe, video, fps, max(1, min(140, int(max_frames))), out), capture_output=True, text=True,
+        r = subprocess.run(command(exe, video, fps, max(1, min(140, int(max_frames))), out), capture_output=True, text=True, errors='replace',
                            timeout=300, creationflags=NO_WINDOW)
     except (OSError, subprocess.SubprocessError) as e:
         shutil.rmtree(out, ignore_errors=True)

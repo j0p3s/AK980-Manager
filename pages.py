@@ -1736,6 +1736,10 @@ class SystemPage(Page):
         self.auto_btn.pack(anchor='w')
         self.auto_msg = label(st.body, '', 10, False, C['muted'], C['card'])
         self.auto_msg.pack(anchor='w', pady=(8, 0))
+        import appsettings
+        self.start_tray = tk.BooleanVar(value=appsettings.get('start_in_tray'))
+        Toggle(st.body, 'When Windows starts it, start hidden in the tray (off: the window opens)', self.start_tray,
+               lambda: appsettings.set('start_in_tray', bool(self.start_tray.get()))).pack(anchor='w', pady=(10, 0))
         win = Card(self, 'Window')
         win.pack(fill='x', pady=(14, 0))
         label(win.body, 'What the X button of the window does. Hiding to the tray keeps lighting effects and PC actions running.', 9,
